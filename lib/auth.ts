@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { compareSync } from "bcryptjs";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { hashToken } from "@/lib/crypto";
 import { db, userByEmail, userById } from "@/lib/db";
@@ -8,6 +8,16 @@ import type { PublicUser, Role } from "@/lib/types";
 
 const COOKIE = "waas_session";
 const TWO_WEEKS = 60 * 60 * 24 * 14;
+
+function cookieValue(header: string | null, name: string) {
+  if (!header) return null;
+  for (const part of header.split(/;\s*/)) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq) === name) return decodeURIComponent(part.slice(eq + 1));
+  }
+  return null;
+}
 
 export async function signIn(email: string, password: string) {
   const user = userByEmail(email.trim());
@@ -29,8 +39,7 @@ export async function signOut() {
 }
 
 export async function currentUser() {
-  const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
+  const token = cookieValue((await headers()).get("cookie"), COOKIE);
   if (!token) return null;
   const session = db()
     .prepare("select user_id, expires_at from sessions where id = ?")

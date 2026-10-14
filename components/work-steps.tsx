@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { resolveUrlAction, type UrlMatch } from "@/app/actions";
 import { BlockPicker } from "@/components/block-picker";
 import { PromptBox } from "@/components/prompt-box";
@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Task } from "@/lib/planner";
 import type { BlockDef } from "@/lib/types";
+
+const PANEL: Record<string, string> = {
+  seo: "hidden group-has-[input[value=seo]:checked]:block",
+  text: "hidden group-has-[input[value=text]:checked]:block",
+  image: "hidden group-has-[input[value=image]:checked]:block",
+  case: "hidden group-has-[input[value=case]:checked]:block",
+  blog: "hidden group-has-[input[value=blog]:checked]:block",
+};
 
 const ACTIONS: { id: Task; label: string; needsPage: boolean; hint: string; image: boolean }[] = [
   { id: "seo", label: "SEO aanpassen", needsPage: true, image: false, hint: "SEO-titel: …. Meta-omschrijving: …. Focuswoord: …." },
@@ -61,11 +69,9 @@ function AfterUrl({
   blocks: BlockDef[];
   messages: { role: string; body: string; created_at: number }[];
 }) {
-  const [task, setTask] = useState<Task | null>(null);
-  const chosen = ACTIONS.find((item) => item.id === task) ?? null;
   const hasPage = Boolean(match.kind && match.postId);
   return (
-    <>
+    <div className="group space-y-8">
       <section className="space-y-4">
         <div>
           <h2 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
@@ -84,46 +90,42 @@ function AfterUrl({
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {ACTIONS.map((item) => {
             const disabled = item.needsPage && !hasPage;
-            const on = task === item.id;
             return (
-              <button
+              <label
                 key={item.id}
-                type="button"
-                disabled={disabled}
-                onClick={() => setTask(item.id)}
-                className={`rounded-2xl px-4 py-3 text-left text-sm ring-1 ${on ? "bg-[#fff4e6] text-[#633100] ring-[#f18500]" : "bg-white text-[#061122] ring-[#e4e4e4]"} disabled:opacity-40`}
+                className={`rounded-2xl bg-white px-4 py-3 text-left text-sm text-[#061122] ring-1 ring-[#e4e4e4] has-[:checked]:bg-[#fff4e6] has-[:checked]:text-[#633100] has-[:checked]:ring-[#f18500] has-[:disabled]:opacity-40`}
               >
+                <input type="radio" name="task" value={item.id} disabled={disabled} className="sr-only" />
                 {item.label}
-              </button>
+              </label>
             );
           })}
         </div>
       </section>
 
-      {chosen?.id === "block" && hasPage ? (
-        <BlockPicker blocks={blocks} clientId={clientId} kind={match.kind} postId={match.postId} />
-      ) : null}
+      <div className="hidden group-has-[input[value=block]:checked]:block">
+        {hasPage ? <BlockPicker blocks={blocks} clientId={clientId} kind={match.kind} postId={match.postId} /> : null}
+        <MessageList messages={messages} />
+      </div>
 
-      {chosen && chosen.id !== "block" ? (
-        <section className="rounded-3xl bg-white p-4 ring-1 ring-[#e4e4e4] sm:p-6">
+      {ACTIONS.filter((item) => item.id !== "block").map((item) => (
+        <section key={item.id} className={`rounded-3xl bg-white p-4 ring-1 ring-[#e4e4e4] sm:p-6 ${PANEL[item.id]}`}>
           <h2 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
             3. Prompt
           </h2>
-          <p className="mt-1 mb-3 text-sm text-[#585858]">De prompt geldt voor {chosen.label.toLowerCase()}.</p>
+          <p className="mt-1 mb-3 text-sm text-[#585858]">De prompt geldt voor {item.label.toLowerCase()}.</p>
           <PromptBox
             clientId={clientId}
             kind={match.kind}
             postId={match.postId}
-            task={chosen.id}
-            placeholder={chosen.hint}
-            showImage={chosen.image}
+            task={item.id}
+            placeholder={item.hint}
+            showImage={item.image}
           />
           <MessageList messages={messages} />
         </section>
-      ) : null}
-
-      {chosen?.id === "block" ? <MessageList messages={messages} /> : null}
-    </>
+      ))}
+    </div>
   );
 }
 
