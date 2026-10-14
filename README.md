@@ -16,7 +16,7 @@ AI-beheer voor WaaS 2.0-sites op WoelerWaaS. Marketeers en klanten vragen in gew
 - Een pagina, het menu of de site verwijderen
 - API-gegevens tonen aan iemand die geen beheerder is
 
-Blokken komen uit het themaschema van de site (`OPTIONS /wp/v2/pages`). Een layout die daar niet in staat, kan niet gekozen worden.
+Blokken komen uit het themaschema van de site (`OPTIONS /wp/v2/pages`). Een layout die daar niet in staat, kan niet gekozen worden. Dezelfde afspraken staan in het CMS onder Instellingen.
 
 ## Rollen
 

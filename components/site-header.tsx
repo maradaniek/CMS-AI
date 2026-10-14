@@ -25,6 +25,9 @@ export function SiteHeader({ user }: { user: PublicUser }) {
               Gebruikers
             </Link>
           ) : null}
+          <Link href="/instellingen" className="rounded-full px-3 py-1.5 hover:bg-[#fff4e6]">
+            Instellingen
+          </Link>
           <span className="px-2 text-[#585858]">
             {user.name} · {ROLE[user.role]}
           </span>

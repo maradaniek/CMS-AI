@@ -90,12 +90,6 @@ export default async function ClientPage({
         </form>
       </div>
 
-      <ul className="grid gap-2 text-sm sm:grid-cols-3">
-        <li className="rounded-2xl bg-white p-3 ring-1 ring-[#e4e4e4]">Alleen thema en ACF-velden</li>
-        <li className="rounded-2xl bg-white p-3 ring-1 ring-[#e4e4e4]">Geen CSS</li>
-        <li className="rounded-2xl bg-white p-3 ring-1 ring-[#e4e4e4]">Geen pagina, menu of site verwijderen</li>
-      </ul>
-
       {user.role === "admin" ? (
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
           <Credentials clientId={id} />
