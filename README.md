@@ -4,6 +4,8 @@ AI-beheer voor WaaS 2.0-sites op WoelerWaaS. Marketeers en klanten vragen in gew
 
 ## Wat het wel doet
 
+Op een klantpagina is het een stappenplan: eerst de URL, dan de actie, dan de prompt. Bij een nieuw blok kies je het blok op de themanaam, zoals `hero` of `image_text`.
+
 - Tekst in een bestaand blok aanpassen
 - Een blok toevoegen dat op die site echt bestaat, gekozen uit een preview
 - SEO-titel, meta-omschrijving en focuswoord zetten
@@ -21,7 +23,10 @@ Blokken komen uit het themaschema van de site (`OPTIONS /wp/v2/pages`). Een layo
 ## Rollen
 
 - Beheerder: klanten toevoegen en uit dit systeem halen, API-gegevens zien, gebruikers aanmaken
-- Marketeer en klant: alleen de gekoppelde sites, en alleen de acties hierboven
+- Marketeer: alleen de klanten die onder Gebruikers aan die persoon zijn gekoppeld
+- Klant: alleen de eigen site
+
+Onder Gebruikers vink je per marketeer de klanten aan, en kies je per klant de eigen site. Dat kan bij het uitnodigen en daarna nog een keer.
 
 Een klant uit dit systeem halen laat de WordPress-site staan.
 

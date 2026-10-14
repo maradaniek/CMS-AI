@@ -129,3 +129,12 @@ export function patchBlockText(
   }
   return block;
 }
+
+export function patchBlockImage(block: Record<string, unknown>, imageId: number) {
+  if ("background_image" in block && !("image" in block)) {
+    block.background_image = imageId;
+    return block;
+  }
+  block.image = imageId;
+  return block;
+}

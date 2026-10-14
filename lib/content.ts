@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { buildBlock, coerceAcf, patchBlockText } from "@/lib/acf";
+import { buildBlock, coerceAcf, patchBlockImage, patchBlockText } from "@/lib/acf";
 import { plainText } from "@/lib/sanitize";
 import { analyzeSeo } from "@/lib/seo";
 import { layoutLabel } from "@/lib/labels";
@@ -109,8 +109,8 @@ export async function runPlan(input: {
 
   if (plan.kind === "clarify" || plan.kind === "refuse") return plan.message;
 
-  if (plan.kind === "seo" || plan.kind === "seo-meta" || plan.kind === "update-text" || plan.kind === "add-block" || plan.kind === "publish") {
-    if (!input.kind || !input.postId) return "Kies eerst een pagina, case of blog.";
+  if (plan.kind === "seo" || plan.kind === "seo-meta" || plan.kind === "update-text" || plan.kind === "update-image" || plan.kind === "add-block" || plan.kind === "publish") {
+    if (!input.kind || !input.postId) return "Plak eerst de URL van de pagina.";
   }
 
   if (plan.kind === "seo" || plan.kind === "seo-meta") {
@@ -118,6 +118,10 @@ export async function runPlan(input: {
   }
   if (plan.kind === "update-text") {
     return updateText(input.client, catalog, input.kind!, input.postId!, plan);
+  }
+  if (plan.kind === "update-image") {
+    if (!input.file || input.file.size === 0) return "Kies de nieuwe afbeelding bij de prompt.";
+    return updateImage(input.client, catalog, input.kind!, input.postId!, plan, input.file);
   }
   if (plan.kind === "add-block") {
     return addExistingBlock(input.client, catalog, input.kind!, input.postId!, plan.layout, {
@@ -203,6 +207,30 @@ async function updateText(
   await saveContent(client, kind, postId, coerceAcf(content));
   const report = await reportFor(client, catalog, kind, postId);
   return `De tekst staat in ${layoutLabel(String(content[index].acf_fc_layout))}. ${report.h1Message}`;
+}
+
+async function updateImage(
+  client: ClientRow,
+  catalog: BlockDef[],
+  kind: PostKind,
+  postId: number,
+  plan: Extract<Plan, { kind: "update-image" }>,
+  file: File,
+) {
+  const post = await getContent(client, kind, postId);
+  const content = contentArray(post);
+  const index =
+    plan.target === "first"
+      ? content.findIndex((block) => catalog.find((item) => item.layout === block.acf_fc_layout)?.slots.image)
+      : content.findIndex((block) => block.acf_fc_layout === plan.target);
+  if (index < 0) return "Op deze pagina vind ik geen blok met een afbeelding. Kies in de prompt het blok, bijvoorbeeld de hero.";
+  const layout = String(content[index].acf_fc_layout);
+  const def = catalog.find((item) => item.layout === layout);
+  if (def && !def.slots.image) return `${def.label} heeft geen afbeeldingsveld in dit thema.`;
+  const imageId = await uploadMedia(client, file, def?.label || layout, def?.label || layout);
+  patchBlockImage(content[index], imageId);
+  await saveContent(client, kind, postId, coerceAcf(content));
+  return `De afbeelding staat in ${layoutLabel(layout)}.`;
 }
 
 export async function addExistingBlock(

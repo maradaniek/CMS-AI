@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { guardPrompt } from "../lib/guard";
+import { locateOnSite, pageKey, samePage } from "../lib/locate";
 import { planPrompt } from "../lib/planner";
 import type { BlockDef } from "../lib/types";
 
@@ -58,5 +59,25 @@ if (add.kind === "add-block") assert.equal(add.layout, "image_text");
 
 const blog = planPrompt("Maak een blog over AI. Titel: AI in de praktijk. Tekst: Zo zetten we het in.", catalog, false);
 assert.equal(blog.kind, "create-blog");
+
+const scopedBlog = planPrompt("Titel: AI in de praktijk. Tekst: Zo zetten we het in.", catalog, false, "blog");
+assert.equal(scopedBlog.kind, "create-blog");
+if (scopedBlog.kind === "create-blog") assert.equal(scopedBlog.title, "AI in de praktijk");
+
+const scopedSeo = planPrompt("SEO-titel: Warmtepompen. Meta-omschrijving: Meer aanvragen. Focuswoord: warmtepomp", catalog, true, "seo");
+assert.equal(scopedSeo.kind, "seo-meta");
+if (scopedSeo.kind === "seo-meta") {
+  assert.equal(scopedSeo.seoTitle, "Warmtepompen");
+  assert.equal(scopedSeo.description, "Meer aanvragen");
+  assert.equal(scopedSeo.keyword, "warmtepomp");
+}
+
+const withWww = pageKey("https://www.woeler.nl/contact/");
+const plain = pageKey("https://woeler.nl/contact");
+assert.ok(withWww && plain && samePage(withWww, plain));
+const otherSite = locateOnSite("https://www.woeler.nl", "https://example.com/contact");
+assert.equal("error" in otherSite, true);
+const onPath = locateOnSite("https://www.woeler.nl", "/contact");
+assert.equal("key" in onPath && onPath.key.path, "/contact");
 
 console.log("guard ok");

@@ -34,15 +34,15 @@ export function BlockPicker({
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="font-heading text-2xl text-[#061122]">Blok uit het thema</h2>
+          <h2 className="font-heading text-2xl text-[#061122]">3. Kies het blok</h2>
           <p className="mt-1 max-w-xl text-sm text-[#585858]">
-            Dit zijn de blokken die deze WaaS 2.0-site echt heeft. Een blok dat hier niet staat, kan niet worden toegevoegd.
+            Kies op de naam die dit CMS herkent. De oranje naam is die van het thema, zoals hero of image_text.
           </p>
         </div>
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Zoek een blok"
+          placeholder="Zoek op naam, bijvoorbeeld hero"
           className="h-10 sm:max-w-xs"
         />
       </div>
@@ -58,7 +58,9 @@ export function BlockPicker({
           </button>
         ))}
       </div>
-      {visible.length === 0 ? <p className="text-sm text-[#585858]">Geen blok met die naam in dit thema.</p> : null}
+      {visible.length === 0 ? (
+        <p className="text-sm text-[#585858]">Geen blok met die naam. Zoek op de themanaam, zoals hero of image_text.</p>
+      ) : null}
       {selected ? (
         <form action={action} className="space-y-3 rounded-2xl bg-white p-4 ring-1 ring-[#e4e4e4]">
           <input type="hidden" name="clientId" value={clientId} />
@@ -66,7 +68,8 @@ export function BlockPicker({
           <input type="hidden" name="kind" value={kind ?? ""} />
           <input type="hidden" name="postId" value={postId ?? ""} />
           <p className="text-sm text-[#061122]">
-            {selected.label} komt op de gekozen pagina. Alleen de velden van dit blok worden gevuld.
+            Gekozen: {selected.label}. Ik herken dit blok als <span className="font-medium text-[#f18500]">{selected.layout}</span>.
+            Vul daarna de prompt voor dit blok.
           </p>
           {selected.slots.heading ? (
             <Input name="heading" placeholder="Kop" className="h-10" />

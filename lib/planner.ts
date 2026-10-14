@@ -1,11 +1,14 @@
 import type { BlockDef, PostKind } from "@/lib/types";
 
+export type Task = "seo" | "text" | "image" | "case" | "blog" | "block";
+
 export type Plan =
   | { kind: "clarify"; message: string }
   | { kind: "refuse"; message: string }
   | { kind: "seo"; keyword?: string }
   | { kind: "seo-meta"; seoTitle?: string; description?: string; keyword?: string }
   | { kind: "update-text"; target: string; heading?: string; text?: string }
+  | { kind: "update-image"; target: string }
   | { kind: "add-block"; layout: string; heading?: string; text?: string }
   | { kind: "create-case"; title: string; heading?: string; text?: string; stats: { value: string; label: string }[] }
   | { kind: "create-blog"; title: string; text: string }
@@ -33,7 +36,7 @@ function after(prompt: string, label: RegExp) {
   );
   if (!match?.[1]) return undefined;
   return match[1]
-    .split(/\s+(?:tekst|kop|titel|citaat|cijfers)\s*(?:op|naar|wordt|:|-)/i)[0]
+    .split(/\s+(?:tekst|kop|titel|seo-?titel|meta-?omschrijving|omschrijving|focuswoord|zoekwoord|citaat|cijfers)\s*(?:op|naar|wordt|:|-)/i)[0]
     .replace(/[\"”'.]\s*$/g, "")
     .trim();
 }
@@ -57,9 +60,53 @@ function statsFrom(prompt: string) {
   return stats.slice(0, 2);
 }
 
-export function planPrompt(prompt: string, catalog: BlockDef[], hasPage: boolean): Plan {
+function pageNeeded(): Plan {
+  return { kind: "clarify", message: "Plak eerst de URL van de pagina op deze site." };
+}
+
+function planTask(text: string, catalog: BlockDef[], hasPage: boolean, task?: Task | null): Plan | null {
+  if (!task || task === "block") return null;
+  if (task === "blog") {
+    const title = after(text, /titel/) || text.split("\n")[0].trim();
+    const body = after(text, /tekst/) || "";
+    if (!title) return { kind: "clarify", message: "Zet in de prompt een titel, bijvoorbeeld: Titel: AI in de praktijk. Tekst: …." };
+    return { kind: "create-blog", title, text: body };
+  }
+  if (task === "case") {
+    const title = after(text, /titel/) || text.split("\n")[0].trim();
+    if (!title) return { kind: "clarify", message: "Zet in de prompt een titel. Cijfers mag je erbij zetten, bijvoorbeeld 120% meer leads." };
+    return {
+      kind: "create-case",
+      title,
+      heading: after(text, /kop/) || title,
+      text: after(text, /tekst/) || "",
+      stats: statsFrom(text),
+    };
+  }
+  if (!hasPage) return pageNeeded();
+  if (task === "seo") {
+    const seoTitle = after(text, /seo-?titel|titel/);
+    const description = after(text, /meta-?omschrijving|omschrijving/);
+    const keyword = after(text, /focuswoord|zoekwoord|keyword/) || (!seoTitle && !description ? text : undefined);
+    if (!seoTitle && !description && !keyword) {
+      return { kind: "clarify", message: "Zet de SEO-titel, de meta-omschrijving of het focuswoord in de prompt." };
+    }
+    return { kind: "seo-meta", seoTitle, description, keyword };
+  }
+  if (task === "text") {
+    const heading = after(text, /kop|titel/);
+    const body = after(text, /tekst|alinea|citaat/);
+    if (!heading && !body) return { kind: "clarify", message: "Zet in de prompt wat de nieuwe kop of tekst moet worden." };
+    return { kind: "update-text", target: resolveLayout(text, catalog)?.layout ?? "first", heading, text: body };
+  }
+  return { kind: "update-image", target: resolveLayout(text, catalog)?.layout ?? "first" };
+}
+
+export function planPrompt(prompt: string, catalog: BlockDef[], hasPage: boolean, task?: Task | null): Plan {
   const text = prompt.trim();
   const lower = text.toLowerCase();
+  const scoped = planTask(text, catalog, hasPage, task);
+  if (scoped) return scoped;
 
   if (/\b(publiceer|zet live|zet online)\b/.test(lower)) {
     if (!hasPage) return { kind: "clarify", message: "Kies eerst het concept dat live mag." };

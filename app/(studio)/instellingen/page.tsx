@@ -22,8 +22,9 @@ const GROUPS = [
   {
     title: "Wie wat ziet",
     items: [
-      "Een beheerder ziet de API-gegevens van een klant en kan klanten en gebruikers toevoegen of weghalen.",
-      "Een marketeer of klant ziet alleen de toegewezen klanten, zonder API-gegevens.",
+      "Een beheerder ziet alle klanten, de API-gegevens, en kan klanten en gebruikers toevoegen of weghalen.",
+      "Een marketeer ziet alleen de klanten die een beheerder aan die persoon heeft gekoppeld, zonder API-gegevens.",
+      "Een klant ziet alleen de eigen site, zonder API-gegevens.",
       "Een klant uit dit CMS halen laat de WordPress-site staan.",
     ],
   },
