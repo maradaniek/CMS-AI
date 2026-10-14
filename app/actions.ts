@@ -63,8 +63,7 @@ export async function createClientAction(_state: { error: string } | null, formD
 export async function deleteClientAction(formData: FormData) {
   await requireRole("admin");
   const id = String(formData.get("id") || "");
-  const confirm = String(formData.get("confirm") || "");
-  if (confirm !== "weg") return;
+  if (String(formData.get("sure") || "") !== "ja") return;
   db().prepare("delete from assignments where client_id = ?").run(id);
   db().prepare("delete from schemas where client_id = ?").run(id);
   db().prepare("delete from messages where client_id = ?").run(id);

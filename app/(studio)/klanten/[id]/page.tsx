@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { deleteClientAction, refreshCatalogAction } from "@/app/actions";
-import { Credentials } from "@/components/credentials";
+import { refreshCatalogAction } from "@/app/actions";
 import { WorkSteps } from "@/components/work-steps";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
@@ -39,22 +38,6 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           </Button>
         </form>
       </div>
-
-      {user.role === "admin" ? (
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
-          <Credentials clientId={id} />
-          <form action={deleteClientAction} className="rounded-2xl bg-white p-4 ring-1 ring-[#e4e4e4]">
-            <input type="hidden" name="id" value={id} />
-            <p className="text-sm text-[#585858]">Haalt de klant uit dit CMS. De website zelf blijft staan.</p>
-            <div className="mt-3 flex gap-2">
-              <input name="confirm" placeholder="typ weg" className="h-10 rounded-lg border border-[#e4e4e4] px-3 text-sm" />
-              <Button type="submit" variant="outline" className="h-10">
-                Uit het systeem halen
-              </Button>
-            </div>
-          </form>
-        </div>
-      ) : null}
 
       {catalogError ? <p className="text-sm text-[#d91515]">{catalogError}</p> : null}
       <WorkSteps clientId={id} blocks={catalog} messages={messagesFor(id)} />

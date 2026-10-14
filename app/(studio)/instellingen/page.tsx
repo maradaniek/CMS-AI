@@ -1,3 +1,8 @@
+import { deleteClientAction } from "@/app/actions";
+import { Button } from "@/components/ui/button";
+import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+
 const GROUPS = [
   {
     title: "Wat wel kan",
@@ -30,7 +35,16 @@ const GROUPS = [
   },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const user = await requireUser();
+  const clients =
+    user.role === "admin"
+      ? (db().prepare("select id, name, site_url from clients order by name").all() as {
+          id: string;
+          name: string;
+          site_url: string;
+        }[])
+      : [];
   return (
     <main className="max-w-3xl space-y-8">
       <div>
@@ -55,6 +69,32 @@ export default function SettingsPage() {
           </ul>
         </section>
       ))}
+      {user.role === "admin" ? (
+        <section className="space-y-3">
+          <h2 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
+            Site uit het CMS halen
+          </h2>
+          <p className="text-sm text-[#585858]">De WordPress-site blijft staan. Alleen de koppeling in dit CMS verdwijnt.</p>
+          <ul className="space-y-3">
+            {clients.map((client) => (
+              <li key={client.id} className="rounded-2xl bg-white p-4 ring-1 ring-[#e4e4e4]">
+                <p className="text-sm text-[#061122]">{client.name}</p>
+                <p className="text-sm text-[#585858]">{client.site_url.replace(/^https?:\/\//, "")}</p>
+                <form action={deleteClientAction} className="mt-3 space-y-3">
+                  <input type="hidden" name="id" value={client.id} />
+                  <label className="flex items-start gap-2 text-sm text-[#061122]">
+                    <input type="checkbox" name="sure" value="ja" required className="mt-1" />
+                    <span>Je staat op het punt om de site uit het AI CMS te halen, weet je het zeker?</span>
+                  </label>
+                  <Button type="submit" variant="outline" className="h-10">
+                    Uit het CMS halen
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }
