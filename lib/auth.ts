@@ -1,9 +1,8 @@
-import { randomBytes } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { compareSync } from "bcryptjs";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { hashToken } from "@/lib/crypto";
-import { db, userByEmail, userById } from "@/lib/db";
+import { userByEmail } from "@/lib/db";
 import type { PublicUser, Role } from "@/lib/types";
 
 const COOKIE = "waas_session";
@@ -19,33 +18,59 @@ function cookieValue(header: string | null, name: string) {
   return null;
 }
 
+function secret() {
+  const value = process.env.APP_SECRET;
+  if (!value) throw new Error("APP_SECRET ontbreekt. Zet die variabele in Vercel.");
+  return value;
+}
+
+function sign(user: PublicUser) {
+  const body = Buffer.from(JSON.stringify({ ...user, exp: Date.now() + TWO_WEEKS * 1000 })).toString("base64url");
+  const sig = createHmac("sha256", secret()).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+
+function read(token: string): PublicUser | null {
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", secret()).update(body).digest("base64url");
+  const left = Buffer.from(sig);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) return null;
+  const payload = JSON.parse(Buffer.from(body, "base64url").toString()) as PublicUser & { exp: number };
+  if (!payload.exp || payload.exp < Date.now() || !payload.id || !payload.role) return null;
+  return { id: payload.id, name: payload.name, email: payload.email, role: payload.role };
+}
+
 export async function signIn(email: string, password: string) {
-  const user = userByEmail(email.trim());
+  const user = await userByEmail(email.trim());
   if (!user || !compareSync(password, user.password_hash)) return null;
-  const token = randomBytes(32).toString("hex");
-  db()
-    .prepare("insert into sessions (id, user_id, expires_at) values (?, ?, ?)")
-    .run(hashToken(token), user.id, Date.now() + TWO_WEEKS * 1000);
   const jar = await cookies();
-  jar.set(COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: TWO_WEEKS });
+  jar.set(COOKIE, sign(user), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: TWO_WEEKS,
+  });
   return { id: user.id, name: user.name, email: user.email, role: user.role } satisfies PublicUser;
 }
 
 export async function signOut() {
   const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
-  if (token) db().prepare("delete from sessions where id = ?").run(hashToken(token));
   jar.delete(COOKIE);
 }
 
 export async function currentUser() {
   const token = cookieValue((await headers()).get("cookie"), COOKIE);
   if (!token) return null;
-  const session = db()
-    .prepare("select user_id, expires_at from sessions where id = ?")
-    .get(hashToken(token)) as { user_id: string; expires_at: number } | undefined;
-  if (!session || session.expires_at < Date.now()) return null;
-  return userById(session.user_id) ?? null;
+  try {
+    return read(token);
+  } catch {
+    return null;
+  }
 }
 
 export async function requireUser() {

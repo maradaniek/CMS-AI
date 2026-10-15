@@ -4,7 +4,7 @@ import { listClientsFor } from "@/lib/db";
 
 export default async function HomePage() {
   const user = await requireUser();
-  const clients = listClientsFor(user);
+  const clients = await listClientsFor(user);
   return (
     <main>
       <div className="flex flex-wrap items-end justify-between gap-4">

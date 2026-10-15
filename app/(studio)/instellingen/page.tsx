@@ -1,7 +1,7 @@
 import { deleteClientAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { listClientOptions } from "@/lib/db";
 
 const GROUPS = [
   {
@@ -39,11 +39,7 @@ export default async function SettingsPage() {
   const user = await requireUser();
   const clients =
     user.role === "admin"
-      ? (db().prepare("select id, name, site_url from clients order by name").all() as {
-          id: string;
-          name: string;
-          site_url: string;
-        }[])
+      ? await listClientOptions()
       : [];
   return (
     <main className="max-w-3xl space-y-8">

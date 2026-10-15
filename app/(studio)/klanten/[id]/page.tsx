@@ -10,8 +10,8 @@ import { WpError } from "@/lib/wp";
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  if (!canAccess(user, id)) notFound();
-  const client = clientById(id);
+  if (!(await canAccess(user, id))) notFound();
+  const client = await clientById(id);
   if (!client) notFound();
 
   let catalogError = "";
@@ -40,7 +40,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       </div>
 
       {catalogError ? <p className="text-sm text-[#d91515]">{catalogError}</p> : null}
-      <WorkSteps clientId={id} blocks={catalog} messages={messagesFor(id)} />
+      <WorkSteps clientId={id} blocks={catalog} messages={await messagesFor(id)} />
     </main>
   );
 }

@@ -19,14 +19,14 @@ import {
 const DAY = 24 * 60 * 60 * 1000;
 
 export async function catalogFor(client: ClientRow, force = false): Promise<BlockDef[]> {
-  const cached = db()
+  const cached = (await (await db())
     .prepare("select catalog_json, fetched_at from schemas where client_id = ?")
-    .get(client.id) as { catalog_json: string; fetched_at: number } | undefined;
-  if (cached && !force && Date.now() - cached.fetched_at < DAY) {
+    .get(client.id)) as { catalog_json: string; fetched_at: number } | undefined;
+  if (cached && !force && Date.now() - Number(cached.fetched_at) < DAY) {
     return JSON.parse(cached.catalog_json) as BlockDef[];
   }
   const catalog = await fetchCatalog(client);
-  db()
+  await (await db())
     .prepare(
       `insert into schemas (client_id, catalog_json, fetched_at) values (?, ?, ?)
        on conflict(client_id) do update set catalog_json = excluded.catalog_json, fetched_at = excluded.fetched_at`,
@@ -35,22 +35,26 @@ export async function catalogFor(client: ClientRow, force = false): Promise<Bloc
   return catalog;
 }
 
-export function rememberedSeo(clientId: string, kind: PostKind, postId: number) {
+export async function rememberedSeo(clientId: string, kind: PostKind, postId: number) {
   return (
-    db()
+    ((await (await db())
       .prepare("select seo_title, description, keyword from seo_meta where client_id = ? and post_type = ? and post_id = ?")
-      .get(clientId, kind, postId) as { seo_title: string; description: string; keyword: string } | undefined
-  ) ?? { seo_title: "", description: "", keyword: "" };
+      .get(clientId, kind, postId)) as { seo_title: string; description: string; keyword: string } | undefined) ?? {
+      seo_title: "",
+      description: "",
+      keyword: "",
+    }
+  );
 }
 
-export function rememberSeo(
+export async function rememberSeo(
   clientId: string,
   kind: PostKind,
   postId: number,
   meta: { seoTitle?: string; description?: string; keyword?: string },
 ) {
-  const current = rememberedSeo(clientId, kind, postId);
-  db()
+  const current = await rememberedSeo(clientId, kind, postId);
+  await (await db())
     .prepare(
       `insert into seo_meta (client_id, post_type, post_id, seo_title, description, keyword)
        values (?, ?, ?, ?, ?, ?)
@@ -152,13 +156,13 @@ async function seoReply(
     if (plan.keyword) meta.rank_math_focus_keyword = plan.keyword;
     if (!Object.keys(meta).length) return "Zet erbij wat de SEO-titel, meta-omschrijving of het focuswoord moet worden.";
     await updateRankMath(client, postId, meta);
-    rememberSeo(client.id, kind, postId, {
+    await rememberSeo(client.id, kind, postId, {
       seoTitle: plan.seoTitle,
       description: plan.description,
       keyword: plan.keyword,
     });
   } else if (plan.keyword) {
-    rememberSeo(client.id, kind, postId, { keyword: plan.keyword });
+    await rememberSeo(client.id, kind, postId, { keyword: plan.keyword });
     await updateRankMath(client, postId, { rank_math_focus_keyword: plan.keyword }).catch(() => undefined);
   }
   const report = await reportFor(client, catalog, kind, postId);
@@ -168,7 +172,7 @@ async function seoReply(
 export async function reportFor(client: ClientRow, catalog: BlockDef[], kind: PostKind, postId: number) {
   const post = await getContent(client, kind, postId);
   const blocks = Array.isArray(post.acf?.content) ? post.acf.content : [];
-  const stored = rememberedSeo(client.id, kind, postId);
+  const stored = await rememberedSeo(client.id, kind, postId);
   let seoTitle = stored.seo_title;
   let description = stored.description;
   if (post.status === "publish" && post.link && (!seoTitle || !description)) {
@@ -321,14 +325,14 @@ async function createCase(
   return `Concept-case “${plan.title}” staat klaar (${created.link}). Zeg “publiceer” als hij live mag.`;
 }
 
-export function addMessage(clientId: string, userId: string, role: "user" | "assistant", body: string) {
-  db()
+export async function addMessage(clientId: string, userId: string, role: "user" | "assistant", body: string) {
+  await (await db())
     .prepare("insert into messages (id, client_id, user_id, role, body, created_at) values (?, ?, ?, ?, ?, ?)")
     .run(randomBytes(8).toString("hex"), clientId, userId, role, body, Date.now());
 }
 
-export function messagesFor(clientId: string) {
-  return db()
+export async function messagesFor(clientId: string) {
+  return (await db())
     .prepare("select role, body, created_at from messages where client_id = ? order by created_at asc limit 80")
-    .all(clientId) as { role: string; body: string; created_at: number }[];
+    .all(clientId) as Promise<{ role: string; body: string; created_at: number }[]>;
 }

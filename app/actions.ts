@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { requireRole, requireUser, signIn, signOut } from "@/lib/auth";
 import { addExistingBlock, addMessage, catalogFor, messagesFor, runPlan } from "@/lib/content";
 import { canAccess, clientById, db, userById } from "@/lib/db";
+import { durableDatabase } from "@/lib/sql";
 import { encrypt } from "@/lib/crypto";
 import { guardPrompt } from "@/lib/guard";
 import { locateOnSite, pageKey, samePage } from "@/lib/locate";
@@ -17,7 +18,12 @@ import { listContent, testConnection, WpError } from "@/lib/wp";
 export async function loginAction(_state: { error: string } | null, formData: FormData) {
   const email = String(formData.get("email") || "");
   const password = String(formData.get("password") || "");
-  const user = await signIn(email, password);
+  let user: Awaited<ReturnType<typeof signIn>> = null;
+  try {
+    user = await signIn(email, password);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Inloggen lukt niet." };
+  }
   if (!user) return { error: "Onbekend e-mailadres of wachtwoord." };
   redirect("/");
 }
@@ -29,6 +35,12 @@ export async function logoutAction() {
 
 export async function createClientAction(_state: { error: string } | null, formData: FormData) {
   await requireRole("admin");
+  if (process.env.VERCEL && !durableDatabase()) {
+    return {
+      error:
+        "Klanten blijven zo niet staan. Koppel in Vercel bij Storage een Postgres-database aan dit project, en zet APP_SECRET bij Environment Variables.",
+    };
+  }
   const name = String(formData.get("name") || "").trim();
   const siteUrl = String(formData.get("siteUrl") || "").trim();
   const username = String(formData.get("username") || "").trim();
@@ -37,12 +49,18 @@ export async function createClientAction(_state: { error: string } | null, formD
     return { error: "Naam, site, gebruiker en applicatiewachtwoord zijn nodig." };
   }
   const id = randomBytes(8).toString("hex");
+  let encrypted = "";
+  try {
+    encrypted = encrypt(appPassword);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Het wachtwoord kan niet worden opgeslagen." };
+  }
   const row = {
     id,
     name,
     site_url: siteUrl,
     wp_username: username,
-    wp_app_password_enc: encrypt(appPassword),
+    wp_app_password_enc: encrypted,
     created_at: Date.now(),
   };
   try {
@@ -51,11 +69,15 @@ export async function createClientAction(_state: { error: string } | null, formD
     const message = error instanceof WpError ? error.message : "De site reageert niet.";
     return { error: `Geen verbinding met WaaS. ${message}` };
   }
-  db()
-    .prepare(
-      "insert into clients (id, name, site_url, wp_username, wp_app_password_enc, created_at) values (?, ?, ?, ?, ?, ?)",
-    )
-    .run(id, name, siteUrl, username, row.wp_app_password_enc, row.created_at);
+  try {
+    await (await db())
+      .prepare(
+        "insert into clients (id, name, site_url, wp_username, wp_app_password_enc, created_at) values (?, ?, ?, ?, ?, ?)",
+      )
+      .run(id, name, siteUrl, username, row.wp_app_password_enc, row.created_at);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "De klant is niet opgeslagen." };
+  }
   revalidatePath("/");
   redirect(`/klanten/${id}`);
 }
@@ -64,18 +86,19 @@ export async function deleteClientAction(formData: FormData) {
   await requireRole("admin");
   const id = String(formData.get("id") || "");
   if (String(formData.get("sure") || "") !== "ja") return;
-  db().prepare("delete from assignments where client_id = ?").run(id);
-  db().prepare("delete from schemas where client_id = ?").run(id);
-  db().prepare("delete from messages where client_id = ?").run(id);
-  db().prepare("delete from seo_meta where client_id = ?").run(id);
-  db().prepare("delete from clients where id = ?").run(id);
+  const database = await db();
+  await database.prepare("delete from assignments where client_id = ?").run(id);
+  await database.prepare("delete from schemas where client_id = ?").run(id);
+  await database.prepare("delete from messages where client_id = ?").run(id);
+  await database.prepare("delete from seo_meta where client_id = ?").run(id);
+  await database.prepare("delete from clients where id = ?").run(id);
   revalidatePath("/");
   redirect("/");
 }
 
 export async function revealCredentials(clientId: string) {
   await requireRole("admin");
-  const client = clientById(clientId);
+  const client = await clientById(clientId);
   if (!client) return null;
   const { decrypt } = await import("@/lib/crypto");
   return { username: client.wp_username, appPassword: decrypt(client.wp_app_password_enc), siteUrl: client.site_url };
@@ -94,16 +117,16 @@ export async function createUserAction(_state: { error: string } | null, formDat
   if (role === "klant" && clients.length > 1) {
     return { error: "Een klant koppel je aan één site." };
   }
-  if (!knownClients(clients)) return { error: "Onbekende klant." };
+  if (!(await knownClients(clients))) return { error: "Onbekende klant." };
   const id = randomBytes(8).toString("hex");
   try {
-    db()
+    await (await db())
       .prepare("insert into users (id, name, email, password_hash, role) values (?, ?, ?, ?, ?)")
       .run(id, name, email, hashSync(password, 10), role);
   } catch {
     return { error: "Dit e-mailadres bestaat al." };
   }
-  if (role !== "admin") saveAssignments(id, clients);
+  if (role !== "admin") await saveAssignments(id, clients);
   revalidatePath("/gebruikers");
   return { error: "" };
 }
@@ -111,41 +134,35 @@ export async function createUserAction(_state: { error: string } | null, formDat
 export async function assignClientsAction(_state: { error: string } | null, formData: FormData) {
   await requireRole("admin");
   const userId = String(formData.get("userId") || "");
-  const target = userById(userId);
+  const target = await userById(userId);
   if (!target) return { error: "Gebruiker niet gevonden." };
   if (target.role === "admin") return { error: "Een beheerder ziet alle klanten. Daar valt niets aan te koppelen." };
   const clients = [...new Set(formData.getAll("clients").map(String).filter(Boolean))];
   if (target.role === "klant" && clients.length > 1) return { error: "Een klant koppel je aan één site." };
-  if (!knownClients(clients)) return { error: "Onbekende klant." };
-  saveAssignments(userId, clients);
+  if (!(await knownClients(clients))) return { error: "Onbekende klant." };
+  await saveAssignments(userId, clients);
   revalidatePath("/gebruikers");
   return { error: "" };
 }
 
-function knownClients(ids: string[]) {
-  const known = new Set((db().prepare("select id from clients").all() as { id: string }[]).map((row) => row.id));
+async function knownClients(ids: string[]) {
+  const rows = (await (await db()).prepare("select id from clients").all()) as { id: string }[];
+  const known = new Set(rows.map((row) => row.id));
   return ids.every((id) => known.has(id));
 }
 
-function saveAssignments(userId: string, clientIds: string[]) {
-  const database = db();
-  database.exec("begin");
-  try {
-    database.prepare("delete from assignments where user_id = ?").run(userId);
-    const insert = database.prepare("insert into assignments (user_id, client_id) values (?, ?)");
-    clientIds.forEach((clientId) => insert.run(userId, clientId));
-    database.exec("commit");
-  } catch (error) {
-    database.exec("rollback");
-    throw error;
-  }
+async function saveAssignments(userId: string, clientIds: string[]) {
+  const database = await db();
+  await database.prepare("delete from assignments where user_id = ?").run(userId);
+  const insert = database.prepare("insert into assignments (user_id, client_id) values (?, ?)");
+  for (const clientId of clientIds) await insert.run(userId, clientId);
 }
 
 export async function refreshCatalogAction(formData: FormData) {
   const user = await requireUser();
   const clientId = String(formData.get("clientId") || "");
-  if (!canAccess(user, clientId)) return;
-  const client = clientById(clientId);
+  if (!(await canAccess(user, clientId))) return;
+  const client = await clientById(clientId);
   if (!client) return;
   await catalogFor(client, true);
   revalidatePath(`/klanten/${clientId}`);
@@ -166,8 +183,8 @@ export async function resolveUrlAction(
 ): Promise<{ error: string; match: UrlMatch | null }> {
   const user = await requireUser();
   const clientId = String(formData.get("clientId") || "");
-  if (!canAccess(user, clientId)) return { error: "Geen toegang tot deze klant.", match: null };
-  const client = clientById(clientId);
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant.", match: null };
+  const client = await clientById(clientId);
   if (!client) return { error: "Klant niet gevonden.", match: null };
   const located = locateOnSite(client.site_url, String(formData.get("url") || ""));
   if ("error" in located) return { error: located.error, match: null };
@@ -195,8 +212,8 @@ export async function resolveUrlAction(
 export async function promptAction(_state: { error: string } | null, formData: FormData) {
   const user = await requireUser();
   const clientId = String(formData.get("clientId") || "");
-  if (!canAccess(user, clientId)) return { error: "Geen toegang tot deze klant." };
-  const client = clientById(clientId);
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant." };
+  const client = await clientById(clientId);
   if (!client) return { error: "Klant niet gevonden." };
   const prompt = String(formData.get("prompt") || "").trim();
   if (!prompt) return { error: "Schrijf eerst wat er moet gebeuren." };
@@ -206,7 +223,7 @@ export async function promptAction(_state: { error: string } | null, formData: F
   const taskValue = String(formData.get("task") || "");
   const task = TASKS.find((item) => item === taskValue) ?? null;
   const file = formData.get("image");
-  addMessage(clientId, user.id, "user", prompt);
+  await addMessage(clientId, user.id, "user", prompt);
   const guard = guardPrompt(prompt);
   let reply = guard.allowed ? "" : guard.message;
   if (guard.allowed) {
@@ -224,7 +241,7 @@ export async function promptAction(_state: { error: string } | null, formData: F
       reply = error instanceof WpError ? error.message : "De site gaf een fout. Er is niets verwijderd.";
     }
   }
-  addMessage(clientId, user.id, "assistant", reply);
+  await addMessage(clientId, user.id, "assistant", reply);
   revalidatePath(`/klanten/${clientId}`);
   return { error: "" };
 }
@@ -232,8 +249,8 @@ export async function promptAction(_state: { error: string } | null, formData: F
 export async function addBlockAction(_state: { error: string } | null, formData: FormData) {
   const user = await requireUser();
   const clientId = String(formData.get("clientId") || "");
-  if (!canAccess(user, clientId)) return { error: "Geen toegang tot deze klant." };
-  const client = clientById(clientId);
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant." };
+  const client = await clientById(clientId);
   if (!client) return { error: "Klant niet gevonden." };
   const layout = String(formData.get("layout") || "");
   const kindValue = String(formData.get("kind") || "");
@@ -245,7 +262,7 @@ export async function addBlockAction(_state: { error: string } | null, formData:
   if (!kind || !postId) return { error: "Kies eerst een pagina, case of blog." };
   const guarded = guardPrompt(`${heading}\n${text}`);
   if (!guarded.allowed) return { error: guarded.message };
-  addMessage(clientId, user.id, "user", `Voeg blok ${layout} toe. ${heading} ${text}`.trim());
+  await addMessage(clientId, user.id, "user", `Voeg blok ${layout} toe. ${heading} ${text}`.trim());
   let reply = "";
   try {
     const catalog = await catalogFor(client);
@@ -257,7 +274,7 @@ export async function addBlockAction(_state: { error: string } | null, formData:
   } catch (error) {
     reply = error instanceof WpError ? error.message : "Het blok is niet toegevoegd.";
   }
-  addMessage(clientId, user.id, "assistant", reply);
+  await addMessage(clientId, user.id, "assistant", reply);
   revalidatePath(`/klanten/${clientId}`);
   return { error: reply.startsWith("“") || reply.includes("niet") ? reply : "" };
 }
