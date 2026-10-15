@@ -44,6 +44,9 @@ export function PromptBox({
         </Button>
       </div>
       {state?.error ? <p className="text-sm text-[#d91515]">{state.error}</p> : null}
+      {state && "notice" in state && state.notice ? (
+        <p className="whitespace-pre-wrap text-sm text-[#061122]">{state.notice}</p>
+      ) : null}
     </form>
   );
 }

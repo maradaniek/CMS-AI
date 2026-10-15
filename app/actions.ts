@@ -10,6 +10,7 @@ import { canAccess, clientById, db, userById } from "@/lib/db";
 import { durableDatabase } from "@/lib/sql";
 import { encrypt } from "@/lib/crypto";
 import { guardPrompt } from "@/lib/guard";
+import { demoPageTitle, demoReply, isDemo } from "@/lib/demo";
 import { locateOnSite, pageKey, samePage } from "@/lib/locate";
 import { planPrompt, type Task } from "@/lib/planner";
 import type { PostKind } from "@/lib/types";
@@ -188,6 +189,13 @@ export async function resolveUrlAction(
   if (!client) return { error: "Klant niet gevonden.", match: null };
   const located = locateOnSite(client.site_url, String(formData.get("url") || ""));
   if ("error" in located) return { error: located.error, match: null };
+  if (isDemo(client.id)) {
+    const link = String(formData.get("url") || "").trim();
+    return {
+      error: "",
+      match: { title: demoPageTitle(located.key.path), kind: "pages", postId: 1, link },
+    };
+  }
   const kinds: PostKind[] = ["pages", "cases", "posts"];
   try {
     for (const kind of kinds) {
@@ -223,6 +231,17 @@ export async function promptAction(_state: { error: string } | null, formData: F
   const taskValue = String(formData.get("task") || "");
   const task = TASKS.find((item) => item === taskValue) ?? null;
   const file = formData.get("image");
+  if (isDemo(client.id)) {
+    const names: Record<string, string> = {
+      seo: "SEO aanpassen",
+      text: "Tekst wijzigen",
+      image: "Afbeelding wijzigen",
+      case: "Case toevoegen",
+      blog: "Blog toevoegen",
+      block: "Nieuw blok toevoegen",
+    };
+    return { error: "", notice: demoReply(names[task || ""] || "aanpassing", prompt) };
+  }
   await addMessage(clientId, user.id, "user", prompt);
   const guard = guardPrompt(prompt);
   let reply = guard.allowed ? "" : guard.message;
@@ -243,7 +262,7 @@ export async function promptAction(_state: { error: string } | null, formData: F
   }
   await addMessage(clientId, user.id, "assistant", reply);
   revalidatePath(`/klanten/${clientId}`);
-  return { error: "" };
+  return { error: "", notice: reply };
 }
 
 export async function addBlockAction(_state: { error: string } | null, formData: FormData) {
@@ -262,6 +281,9 @@ export async function addBlockAction(_state: { error: string } | null, formData:
   if (!kind || !postId) return { error: "Kies eerst een pagina, case of blog." };
   const guarded = guardPrompt(`${heading}\n${text}`);
   if (!guarded.allowed) return { error: guarded.message };
+  if (isDemo(client.id)) {
+    return { error: "", notice: demoReply("Nieuw blok toevoegen", `${layout}\n${heading}\n${text}`) };
+  }
   await addMessage(clientId, user.id, "user", `Voeg blok ${layout} toe. ${heading} ${text}`.trim());
   let reply = "";
   try {
@@ -276,7 +298,7 @@ export async function addBlockAction(_state: { error: string } | null, formData:
   }
   await addMessage(clientId, user.id, "assistant", reply);
   revalidatePath(`/klanten/${clientId}`);
-  return { error: reply.startsWith("“") || reply.includes("niet") ? reply : "" };
+  return { error: reply.startsWith("“") || reply.includes("niet") ? reply : "", notice: reply };
 }
 
 export async function loadMessages(clientId: string) {

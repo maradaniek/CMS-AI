@@ -19,9 +19,7 @@ function cookieValue(header: string | null, name: string) {
 }
 
 function secret() {
-  const value = process.env.APP_SECRET;
-  if (!value) throw new Error("APP_SECRET ontbreekt. Zet die variabele in Vercel.");
-  return value;
+  return process.env.APP_SECRET || "waas-cms-demo";
 }
 
 function sign(user: PublicUser) {

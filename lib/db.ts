@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { hashSync } from "bcryptjs";
 import { encrypt } from "@/lib/crypto";
+import { demoClient, isDemo } from "@/lib/demo";
 import { sql, type Sql } from "@/lib/sql";
 import type { PublicUser, Role } from "@/lib/types";
 
@@ -76,26 +77,41 @@ export type ClientRow = {
   wp_app_password_enc: string;
 };
 
+function withDemo(rows: { id: string; name: string; site_url: string }[]) {
+  if (rows.some((row) => row.id === demoClient.id)) return rows;
+  return [{ id: demoClient.id, name: demoClient.name, site_url: demoClient.site_url }, ...rows];
+}
+
 export async function listClientsFor(user: PublicUser) {
-  if (user.role === "admin") {
-    return (await db()).prepare("select id, name, site_url from clients order by name").all() as Promise<
-      { id: string; name: string; site_url: string }[]
-    >;
+  try {
+    if (user.role === "admin") {
+      const rows = (await (await db()).prepare("select id, name, site_url from clients order by name").all()) as {
+        id: string;
+        name: string;
+        site_url: string;
+      }[];
+      return withDemo(rows);
+    }
+    const rows = (await (await db())
+      .prepare(
+        `select c.id, c.name, c.site_url from clients c
+         join assignments a on a.client_id = c.id
+         where a.user_id = ? order by c.name`,
+      )
+      .all(user.id)) as { id: string; name: string; site_url: string }[];
+    return withDemo(rows);
+  } catch {
+    return withDemo([]);
   }
-  return (await db())
-    .prepare(
-      `select c.id, c.name, c.site_url from clients c
-       join assignments a on a.client_id = c.id
-       where a.user_id = ? order by c.name`,
-    )
-    .all(user.id) as Promise<{ id: string; name: string; site_url: string }[]>;
 }
 
 export async function clientById(id: string) {
+  if (isDemo(id)) return demoClient;
   return (await db()).prepare("select * from clients where id = ?").get(id) as Promise<ClientRow | undefined>;
 }
 
 export async function canAccess(user: PublicUser, clientId: string) {
+  if (isDemo(clientId)) return true;
   if (user.role === "admin") return Boolean(await clientById(clientId));
   const row = (await (await db())
     .prepare("select 1 as ok from assignments where user_id = ? and client_id = ?")

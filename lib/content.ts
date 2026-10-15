@@ -3,6 +3,7 @@ import { buildBlock, coerceAcf, patchBlockImage, patchBlockText } from "@/lib/ac
 import { plainText } from "@/lib/sanitize";
 import { analyzeSeo } from "@/lib/seo";
 import { layoutLabel } from "@/lib/labels";
+import { demoCatalog, isDemo } from "@/lib/demo";
 import { db, type ClientRow } from "@/lib/db";
 import type { Plan } from "@/lib/planner";
 import type { BlockDef, PageBlock, PostKind, SeoReport } from "@/lib/types";
@@ -19,6 +20,7 @@ import {
 const DAY = 24 * 60 * 60 * 1000;
 
 export async function catalogFor(client: ClientRow, force = false): Promise<BlockDef[]> {
+  if (isDemo(client.id)) return demoCatalog();
   const cached = (await (await db())
     .prepare("select catalog_json, fetched_at from schemas where client_id = ?")
     .get(client.id)) as { catalog_json: string; fetched_at: number } | undefined;
@@ -332,6 +334,7 @@ export async function addMessage(clientId: string, userId: string, role: "user" 
 }
 
 export async function messagesFor(clientId: string) {
+  if (isDemo(clientId)) return [];
   return (await db())
     .prepare("select role, body, created_at from messages where client_id = ? order by created_at asc limit 80")
     .all(clientId) as Promise<{ role: string; body: string; created_at: number }[]>;

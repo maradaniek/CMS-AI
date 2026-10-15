@@ -37,7 +37,9 @@ export default async function HomePage() {
                 <p className="text-lg text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
                   {client.name}
                 </p>
-                <p className="mt-1 text-sm text-[#585858]">{client.site_url.replace(/^https?:\/\//, "")}</p>
+                <p className="mt-1 text-sm text-[#585858]">
+                  {client.id === "demo" ? "Oefenen, er gaat niets live" : client.site_url.replace(/^https?:\/\//, "")}
+                </p>
               </Link>
             </li>
           ))}

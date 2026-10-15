@@ -85,6 +85,9 @@ export function BlockPicker({
             <Input name="image" type="file" accept="image/*" className="h-10" />
           ) : null}
           {state?.error ? <p className="text-sm text-[#d91515]">{state.error}</p> : null}
+          {state && "notice" in state && state.notice ? (
+            <p className="whitespace-pre-wrap text-sm text-[#061122]">{state.notice}</p>
+          ) : null}
           <Button type="submit" disabled={pending || !kind || !postId} className="h-10 px-4">
             {pending ? "Bezig…" : kind && postId ? `${selected.label} toevoegen` : "Kies eerst een pagina"}
           </Button>
