@@ -12,7 +12,7 @@ const globalDb = globalThis as unknown as { waasDb?: Sql };
 
 function database() {
   if (!globalDb.waasDb) {
-    const dir = path.join(process.cwd(), "data");
+    const dir = process.env.VERCEL ? "/tmp/waas-cms" : path.join(process.cwd(), "data");
     mkdirSync(dir, { recursive: true });
     const db = new DatabaseSync(path.join(dir, "cms.sqlite"));
     db.exec(`
