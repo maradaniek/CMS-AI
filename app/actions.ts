@@ -5,12 +5,13 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole, requireUser, signIn, signOut } from "@/lib/auth";
-import { addExistingBlock, addMessage, catalogFor, messagesFor, runPlan } from "@/lib/content";
+import { addExistingBlock, addFaqBlock, addMessage, catalogFor, messagesFor, runPlan } from "@/lib/content";
 import { canAccess, clientById, db, userById } from "@/lib/db";
 import { durableDatabase } from "@/lib/sql";
 import { encrypt } from "@/lib/crypto";
 import { guardPrompt } from "@/lib/guard";
-import { demoPageTitle, demoReply, isDemo } from "@/lib/demo";
+import { demoPageTitle, demoReply, isDemo, isFaqLayout } from "@/lib/demo";
+import { parseFaqs } from "@/lib/faq";
 import { locateOnSite, pageKey, samePage } from "@/lib/locate";
 import { planPrompt, type Task } from "@/lib/planner";
 import type { PostKind } from "@/lib/types";
@@ -169,7 +170,7 @@ export async function refreshCatalogAction(formData: FormData) {
   revalidatePath(`/klanten/${clientId}`);
 }
 
-const TASKS: Task[] = ["seo", "text", "image", "case", "blog", "block"];
+const TASKS: Task[] = ["seo", "text", "image", "case", "blog", "block", "faq"];
 
 export type UrlMatch = {
   title: string;
@@ -231,15 +232,43 @@ export async function promptAction(_state: { error: string } | null, formData: F
   const taskValue = String(formData.get("task") || "");
   const task = TASKS.find((item) => item === taskValue) ?? null;
   const file = formData.get("image");
+  const names: Record<string, string> = {
+    seo: "SEO aanpassen",
+    text: "Tekst wijzigen",
+    image: "Afbeelding wijzigen",
+    case: "Case toevoegen",
+    blog: "Blog toevoegen",
+    block: "Nieuw blok toevoegen",
+    faq: "FAQ toevoegen",
+  };
+  if (task === "faq") {
+    const items = parseFaqs(prompt);
+    if (!items.length) {
+      return { error: "Zet elke vraag op zichzelf. Bijvoorbeeld:\n\nVraag: Wat kost het?\nAntwoord: Vanaf 6.900 euro." };
+    }
+    const faqLayout = String(formData.get("faqLayout") || "");
+    const layout = isFaqLayout(faqLayout) ? faqLayout : "faqsimple";
+    if (!kind || !postId) return { error: "Plak eerst de URL van de pagina waar de FAQ op moet." };
+    if (isDemo(client.id)) {
+      return {
+        error: "",
+        notice: `${demoReply(names.faq, prompt)}\n\n${items.length} vragen zouden in ${layout} komen. Er is niets live gezet.`,
+      };
+    }
+    await addMessage(clientId, user.id, "user", prompt);
+    let reply = "";
+    try {
+      const catalog = await catalogFor(client);
+      const heading = prompt.match(/^\s*kop\s*:\s*(.+)$/im)?.[1]?.trim();
+      reply = await addFaqBlock(client, catalog, kind, postId, layout, items, heading);
+    } catch (error) {
+      reply = error instanceof WpError ? error.message : "De FAQ is niet toegevoegd.";
+    }
+    await addMessage(clientId, user.id, "assistant", reply);
+    revalidatePath(`/klanten/${clientId}`);
+    return { error: "", notice: reply };
+  }
   if (isDemo(client.id)) {
-    const names: Record<string, string> = {
-      seo: "SEO aanpassen",
-      text: "Tekst wijzigen",
-      image: "Afbeelding wijzigen",
-      case: "Case toevoegen",
-      blog: "Blog toevoegen",
-      block: "Nieuw blok toevoegen",
-    };
     return { error: "", notice: demoReply(names[task || ""] || "aanpassing", prompt) };
   }
   await addMessage(clientId, user.id, "user", prompt);

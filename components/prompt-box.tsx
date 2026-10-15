@@ -14,6 +14,7 @@ export function PromptBox({
   task,
   placeholder,
   showImage,
+  faqLayouts = [],
 }: {
   clientId: string;
   kind: PostKind | null;
@@ -21,6 +22,7 @@ export function PromptBox({
   task: Task;
   placeholder: string;
   showImage: boolean;
+  faqLayouts?: { layout: string; label: string }[];
 }) {
   const [state, action, pending] = useActionState(promptAction, null);
   return (
@@ -29,7 +31,19 @@ export function PromptBox({
       <input type="hidden" name="kind" value={kind ?? ""} />
       <input type="hidden" name="postId" value={postId ?? ""} />
       <input type="hidden" name="task" value={task} />
-      <Textarea name="prompt" required placeholder={placeholder} className="min-h-28 bg-white" />
+      {task === "faq" && faqLayouts.length > 0 ? (
+        <fieldset className="space-y-2">
+          <legend className="text-sm text-[#585858]">Welk FAQ-blok</legend>
+          {faqLayouts.map((item, index) => (
+            <label key={item.layout} className="flex items-center gap-2 text-sm text-[#061122]">
+              <input type="radio" name="faqLayout" value={item.layout} defaultChecked={index === 0} />
+              {item.label}
+              <span className="text-[#f18500]">{item.layout}</span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      <Textarea name="prompt" required placeholder={placeholder} className={task === "faq" ? "min-h-48 bg-white" : "min-h-28 bg-white"} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {showImage ? (
           <label className="text-sm text-[#585858]">

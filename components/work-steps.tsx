@@ -6,6 +6,7 @@ import { BlockPicker } from "@/components/block-picker";
 import { PromptBox } from "@/components/prompt-box";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { isFaqLayout } from "@/lib/demo";
 import type { Task } from "@/lib/planner";
 import type { BlockDef } from "@/lib/types";
 
@@ -15,6 +16,7 @@ const PANEL: Record<string, string> = {
   image: "hidden group-has-[input[value=image]:checked]:block",
   case: "hidden group-has-[input[value=case]:checked]:block",
   blog: "hidden group-has-[input[value=blog]:checked]:block",
+  faq: "hidden group-has-[input[value=faq]:checked]:block",
 };
 
 const ACTIONS: { id: Task; label: string; needsPage: boolean; hint: string; image: boolean }[] = [
@@ -23,6 +25,7 @@ const ACTIONS: { id: Task; label: string; needsPage: boolean; hint: string; imag
   { id: "image", label: "Afbeelding wijzigen", needsPage: true, image: true, hint: "Vervang de afbeelding in de hero." },
   { id: "case", label: "Case toevoegen", needsPage: false, image: true, hint: "Titel: …. Tekst: …. Cijfers: 120% meer leads." },
   { id: "blog", label: "Blog toevoegen", needsPage: false, image: true, hint: "Titel: …. Tekst: …." },
+  { id: "faq", label: "FAQ toevoegen", needsPage: true, image: false, hint: "Vraag: …\nAntwoord: …\n\nVraag: …\nAntwoord: …" },
   { id: "block", label: "Nieuw blok toevoegen", needsPage: true, image: false, hint: "" },
 ];
 
@@ -83,7 +86,7 @@ function AfterUrl({
           </p>
           {hasPage ? null : (
             <p className="mt-1 text-sm text-[#585858]">
-              Dit is de site zelf. Voor SEO, tekst, een afbeelding of een nieuw blok plak je de URL van een pagina.
+              Dit is de site zelf. Voor SEO, tekst, een afbeelding, een FAQ of een nieuw blok plak je de URL van een pagina.
             </p>
           )}
         </div>
@@ -113,7 +116,11 @@ function AfterUrl({
           <h2 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
             3. Prompt
           </h2>
-          <p className="mt-1 mb-3 text-sm text-[#585858]">De prompt geldt voor {item.label.toLowerCase()}.</p>
+          <p className="mt-1 mb-3 text-sm text-[#585858]">
+            {item.id === "faq"
+              ? "Het thema heeft drie FAQ-blokken: faq, faqsimple en faqextensive. Plak hier een lijst vragen voor de URL hierboven."
+              : `De prompt geldt voor ${item.label.toLowerCase()}.`}
+          </p>
           <PromptBox
             clientId={clientId}
             kind={match.kind}
@@ -121,6 +128,7 @@ function AfterUrl({
             task={item.id}
             placeholder={item.hint}
             showImage={item.image}
+            faqLayouts={item.id === "faq" ? blocks.filter((block) => isFaqLayout(block.layout)) : []}
           />
           <MessageList messages={messages} />
         </section>

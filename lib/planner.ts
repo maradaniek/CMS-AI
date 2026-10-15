@@ -1,6 +1,6 @@
 import type { BlockDef, PostKind } from "@/lib/types";
 
-export type Task = "seo" | "text" | "image" | "case" | "blog" | "block";
+export type Task = "seo" | "text" | "image" | "case" | "blog" | "block" | "faq";
 
 export type Plan =
   | { kind: "clarify"; message: string }
@@ -92,6 +92,13 @@ function planTask(text: string, catalog: BlockDef[], hasPage: boolean, task?: Ta
       return { kind: "clarify", message: "Zet de SEO-titel, de meta-omschrijving of het focuswoord in de prompt." };
     }
     return { kind: "seo-meta", seoTitle, description, keyword };
+  }
+  if (task === "faq") {
+    if (!hasPage) return pageNeeded();
+    return {
+      kind: "clarify",
+      message: "Zet elke vraag zo: Vraag: …. Antwoord: ….",
+    };
   }
   if (task === "text") {
     const heading = after(text, /kop|titel/);

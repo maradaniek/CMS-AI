@@ -15,7 +15,7 @@ const LABELS: Record<string, string> = {
   gallery: "Galerij",
   galleryfeed: "Galerij",
   faq: "FAQ",
-  faqsimple: "FAQ",
+  faqsimple: "FAQ eenvoudig",
   faqextensive: "FAQ uitgebreid",
   simpleform: "Formulier",
   cta_panel: "Oproep",

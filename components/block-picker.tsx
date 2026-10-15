@@ -36,7 +36,7 @@ export function BlockPicker({
         <div>
           <h2 className="font-heading text-2xl text-[#061122]">3. Kies het blok</h2>
           <p className="mt-1 max-w-xl text-sm text-[#585858]">
-            Kies op de naam die dit CMS herkent. De oranje naam is die van het thema, zoals hero of image_text.
+            {blocks.length} blokken uit het thema. De oranje naam is de themanaam, zoals hero of image_text.
           </p>
         </div>
         <Input

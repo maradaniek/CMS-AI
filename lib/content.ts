@@ -1,9 +1,9 @@
 import { randomBytes } from "crypto";
 import { buildBlock, coerceAcf, patchBlockImage, patchBlockText } from "@/lib/acf";
-import { plainText } from "@/lib/sanitize";
 import { analyzeSeo } from "@/lib/seo";
 import { layoutLabel } from "@/lib/labels";
-import { demoCatalog, isDemo } from "@/lib/demo";
+import { demoCatalog, isDemo, isFaqLayout } from "@/lib/demo";
+import { plainText, sanitizeRichText } from "@/lib/sanitize";
 import { db, type ClientRow } from "@/lib/db";
 import type { Plan } from "@/lib/planner";
 import type { BlockDef, PageBlock, PostKind, SeoReport } from "@/lib/types";
@@ -14,6 +14,7 @@ import {
   saveContent,
   updateRankMath,
   uploadMedia,
+  wp,
   WpError,
 } from "@/lib/wp";
 
@@ -265,6 +266,52 @@ export async function addExistingBlock(
   await saveContent(client, kind, postId, coerceAcf(content));
   const report = await reportFor(client, catalog, kind, postId);
   return `${def.label} is toegevoegd via het themaveld. ${report.h1Message}`;
+}
+
+export async function addFaqBlock(
+  client: ClientRow,
+  catalog: BlockDef[],
+  kind: PostKind,
+  postId: number,
+  layout: string,
+  items: { question: string; answer: string }[],
+  heading?: string,
+) {
+  const def = catalog.find((block) => block.layout === layout && isFaqLayout(block.layout));
+  if (!def) return "Kies een FAQ-blok dat in dit thema bestaat: faq, faqsimple of faqextensive.";
+  if (!items.length) return "Zet elke vraag zo: Vraag: …. Antwoord: ….";
+  const post = await getContent(client, kind, postId);
+  const content = contentArray(post);
+  const block = buildBlock(def, {
+    heading,
+    text:
+      layout === "faqextensive"
+        ? items
+            .map(
+              (item) =>
+                `<p><strong>${plainText(item.question)}</strong></p><p>${sanitizeRichText(item.answer)}</p>`,
+            )
+            .join("")
+        : undefined,
+  });
+  if (layout !== "faqextensive") {
+    const ids: number[] = [];
+    for (const item of items) {
+      const created = (await wp(client, "/wp/v2/faqs", {
+        method: "POST",
+        body: JSON.stringify({
+          title: plainText(item.question),
+          content: sanitizeRichText(item.answer),
+          status: "publish",
+        }),
+      })) as { id: number };
+      ids.push(created.id);
+    }
+    block[layout === "faq" ? "faq" : "faqs"] = ids;
+  }
+  content.push(block);
+  await saveContent(client, kind, postId, coerceAcf(content));
+  return `${items.length} vragen staan in ${def.label} (${def.layout}).`;
 }
 
 async function publishDraft(client: ClientRow, kind: PostKind, postId: number) {
