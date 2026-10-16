@@ -15,7 +15,10 @@ import { parseFaqs } from "@/lib/faq";
 import { locateOnSite, pageKey, samePage } from "@/lib/locate";
 import { planPrompt, type Task } from "@/lib/planner";
 import type { PostKind } from "@/lib/types";
-import { demoSeoAudit, runSeoAudit, type SeoAudit } from "@/lib/seo-audit";
+import { applyBulk, planBulk } from "@/lib/bulk";
+import { demoSeoAudit, loadLivePages, runSeoAudit, type SeoAudit } from "@/lib/seo-audit";
+import { allowWords, dutchSpell } from "@/lib/spell";
+import { auditAddress, auditSpelling, demoAddressAudit, demoSpellAudit, type AddressAudit, type SpellAudit } from "@/lib/text-audit";
 import { listContent, testConnection, WpError } from "@/lib/wp";
 
 export async function loginAction(_state: { error: string } | null, formData: FormData) {
@@ -350,5 +353,68 @@ export async function seoAuditAction(
     return { error: "", report: await runSeoAudit(client, keyword) };
   } catch (error) {
     return { error: error instanceof WpError ? error.message : "De SEO-check is niet gelukt.", report: null };
+  }
+}
+
+export async function spellingAuditAction(
+  _state: { error: string; report: SpellAudit | null } | null,
+  formData: FormData,
+) {
+  const user = await requireUser();
+  const clientId = String(formData.get("clientId") || "");
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant.", report: null };
+  const client = await clientById(clientId);
+  if (!client) return { error: "Klant niet gevonden.", report: null };
+  if (isDemo(client.id)) return { error: "", report: demoSpellAudit() };
+  try {
+    const pages = await loadLivePages(client);
+    const spell = await dutchSpell();
+    return { error: "", report: auditSpelling(pages, spell, allowWords(client.name, client.site_url)) };
+  } catch (error) {
+    return { error: error instanceof WpError ? error.message : "De spellingcheck is niet gelukt.", report: null };
+  }
+}
+
+export async function styleAuditAction(
+  _state: { error: string; report: AddressAudit | null } | null,
+  formData: FormData,
+) {
+  const user = await requireUser();
+  const clientId = String(formData.get("clientId") || "");
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant.", report: null };
+  const client = await clientById(clientId);
+  if (!client) return { error: "Klant niet gevonden.", report: null };
+  if (isDemo(client.id)) return { error: "", report: demoAddressAudit() };
+  try {
+    return { error: "", report: auditAddress(await loadLivePages(client)) };
+  } catch (error) {
+    return { error: error instanceof WpError ? error.message : "De stijlcheck is niet gelukt.", report: null };
+  }
+}
+
+export async function bulkAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const user = await requireUser();
+  const clientId = String(formData.get("clientId") || "");
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant.", notice: "" };
+  const client = await clientById(clientId);
+  if (!client) return { error: "Klant niet gevonden.", notice: "" };
+  const prompt = String(formData.get("prompt") || "").trim();
+  if (!prompt) return { error: "Schrijf eerst wat er moet gebeuren.", notice: "" };
+  const task = String(formData.get("task") || "");
+  const guarded = guardPrompt(prompt);
+  if (!guarded.allowed) return { error: guarded.message, notice: "" };
+  const plan = planBulk(task, prompt);
+  if (plan.kind === "clarify") return { error: plan.message, notice: "" };
+  if (isDemo(client.id)) {
+    return { error: "", notice: `${demoReply("bulk op de hele site", prompt)}\nEr is niets op de pagina’s gezet.` };
+  }
+  try {
+    const notice = await applyBulk(client, plan);
+    await addMessage(clientId, user.id, "user", prompt);
+    await addMessage(clientId, user.id, "assistant", notice);
+    revalidatePath(`/klanten/${clientId}`);
+    return { error: "", notice };
+  } catch (error) {
+    return { error: error instanceof WpError ? error.message : "De bulk-wijziging is niet gelukt.", notice: "" };
   }
 }

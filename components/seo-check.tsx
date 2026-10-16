@@ -10,29 +10,25 @@ export function SeoCheck({ clientId }: { clientId: string }) {
   const report = state?.report;
 
   return (
-    <section className="rounded-3xl bg-white p-4 ring-1 ring-[#e4e4e4] sm:p-6">
-      <form action={action} className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="flex h-full flex-col rounded-3xl bg-white p-4 ring-1 ring-[#e4e4e4] sm:p-6">
+      <form action={action} className="flex flex-col gap-3">
         <div>
-          <h2 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
+          <h3 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
             SEO-check
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-[#585858]">
-            Controleert H1, titel-tag en meta-omschrijving van alle gepubliceerde pagina’s, blogs en cases. Vul een focuswoord in om te zien of het in de titel-tag, de H1 en de tekst staat.
-          </p>
+          </h3>
+          <p className="mt-1 text-sm text-[#585858]">H1, titel-tag en meta-omschrijving. Een focuswoord laat zien waar het ontbreekt.</p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-          <input type="hidden" name="clientId" value={clientId} />
-          <Input name="keyword" placeholder="Focuswoord, bijvoorbeeld warmtepomp" className="h-10 sm:w-72" />
-          <Button type="submit" disabled={pending} className="h-10 px-4">
-            {pending ? "Bezig…" : "SEO-check"}
-          </Button>
-        </div>
+        <input type="hidden" name="clientId" value={clientId} />
+        <Input name="keyword" placeholder="Focuswoord, bijvoorbeeld warmtepomp" className="h-10" />
+        <Button type="submit" disabled={pending} className="h-10 px-4">
+          {pending ? "Bezig…" : "SEO-check"}
+        </Button>
       </form>
 
       {state?.error ? <p className="mt-4 text-sm text-[#d91515]">{state.error}</p> : null}
 
       {report ? (
-        <div className="mt-6 space-y-6">
+        <div className="mt-4 max-h-96 space-y-4 overflow-auto">
           <p className="text-sm text-[#061122]">
             {report.checked} pagina’s gelezen
             {report.unread ? `, ${report.unread} niet bereikbaar` : ""}.

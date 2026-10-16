@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { refreshCatalogAction } from "@/app/actions";
 import { SeoCheck } from "@/components/seo-check";
+import { SpellingCheck, StyleCheck } from "@/components/text-checks";
 import { WorkSteps } from "@/components/work-steps";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
@@ -15,6 +17,10 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!(await canAccess(user, id))) notFound();
   const client = await clientById(id);
   if (!client) notFound();
+  const jar = await cookies();
+  const scope = jar.get(`waas_scope_${id}`)?.value ?? "";
+  const bulk = jar.get(`waas_bulk_${id}`)?.value ?? "";
+  const task = jar.get(`waas_task_${id}`)?.value ?? "";
 
   let catalogError = "";
   let catalog: Awaited<ReturnType<typeof catalogFor>> = [];
@@ -47,8 +53,25 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       </div>
 
       {catalogError ? <p className="text-sm text-[#d91515]">{catalogError}</p> : null}
-      <SeoCheck clientId={id} />
-      <WorkSteps clientId={id} blocks={catalog} messages={await messagesFor(id)} />
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold tracking-[0.14em] text-[#585858]">CHECKS</h2>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <SeoCheck clientId={id} />
+          <SpellingCheck clientId={id} />
+          <StyleCheck clientId={id} />
+        </div>
+      </section>
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold tracking-[0.14em] text-[#585858]">WEBSITE WIJZIGINGEN</h2>
+        <WorkSteps
+          clientId={id}
+          blocks={catalog}
+          messages={await messagesFor(id)}
+          initialScope={scope === "site" || scope === "page" ? scope : ""}
+          initialBulk={bulk}
+          initialTask={task}
+        />
+      </section>
     </main>
   );
 }

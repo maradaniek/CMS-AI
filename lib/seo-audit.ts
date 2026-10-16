@@ -370,7 +370,7 @@ async function pool<T, R>(items: T[], limit: number, task: (item: T) => Promise<
   return results;
 }
 
-export async function runSeoAudit(client: ClientRow, keyword: string) {
+export async function loadLivePages(client: ClientRow) {
   const lists = await Promise.all([published(client, "pages"), published(client, "posts"), published(client, "cases")]);
   const seen = new Set<string>();
   const targets = lists.flat().filter((item) => {
@@ -378,6 +378,9 @@ export async function runSeoAudit(client: ClientRow, keyword: string) {
     seen.add(item.link);
     return true;
   });
-  const pages = await pool(targets, 6, (item) => readLive(item.link, item.name));
-  return auditPages(pages, keyword);
+  return pool(targets, 6, (item) => readLive(item.link, item.name));
+}
+
+export async function runSeoAudit(client: ClientRow, keyword: string) {
+  return auditPages(await loadLivePages(client), keyword);
 }
