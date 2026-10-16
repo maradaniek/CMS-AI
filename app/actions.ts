@@ -15,6 +15,7 @@ import { parseFaqs } from "@/lib/faq";
 import { locateOnSite, pageKey, samePage } from "@/lib/locate";
 import { planPrompt, type Task } from "@/lib/planner";
 import type { PostKind } from "@/lib/types";
+import { demoSeoAudit, runSeoAudit, type SeoAudit } from "@/lib/seo-audit";
 import { listContent, testConnection, WpError } from "@/lib/wp";
 
 export async function loginAction(_state: { error: string } | null, formData: FormData) {
@@ -332,4 +333,22 @@ export async function addBlockAction(_state: { error: string } | null, formData:
 
 export async function loadMessages(clientId: string) {
   return messagesFor(clientId);
+}
+
+export async function seoAuditAction(
+  _state: { error: string; report: SeoAudit | null } | null,
+  formData: FormData,
+) {
+  const user = await requireUser();
+  const clientId = String(formData.get("clientId") || "");
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant.", report: null };
+  const client = await clientById(clientId);
+  if (!client) return { error: "Klant niet gevonden.", report: null };
+  const keyword = String(formData.get("keyword") || "").trim();
+  if (isDemo(client.id)) return { error: "", report: demoSeoAudit(keyword) };
+  try {
+    return { error: "", report: await runSeoAudit(client, keyword) };
+  } catch (error) {
+    return { error: error instanceof WpError ? error.message : "De SEO-check is niet gelukt.", report: null };
+  }
 }

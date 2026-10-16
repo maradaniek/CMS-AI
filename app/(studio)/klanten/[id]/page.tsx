@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { refreshCatalogAction } from "@/app/actions";
+import { SeoCheck } from "@/components/seo-check";
 import { WorkSteps } from "@/components/work-steps";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
@@ -46,6 +47,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       </div>
 
       {catalogError ? <p className="text-sm text-[#d91515]">{catalogError}</p> : null}
+      <SeoCheck clientId={id} />
       <WorkSteps clientId={id} blocks={catalog} messages={await messagesFor(id)} />
     </main>
   );
