@@ -11,7 +11,7 @@ export function SeoCheck({ clientId }: { clientId: string }) {
 
   return (
     <section className="flex h-full flex-col rounded-3xl bg-white p-4 ring-1 ring-[#e4e4e4] sm:p-6">
-      <form action={action} className="flex flex-col gap-3">
+      <form action={action} className="flex flex-1 flex-col gap-3">
         <div>
           <h3 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
             SEO-check
@@ -20,7 +20,7 @@ export function SeoCheck({ clientId }: { clientId: string }) {
         </div>
         <input type="hidden" name="clientId" value={clientId} />
         <Input name="keyword" placeholder="Focuswoord, bijvoorbeeld warmtepomp" className="h-10" />
-        <Button type="submit" disabled={pending} className="h-10 px-4">
+        <Button type="submit" disabled={pending} className="mt-auto h-10 px-4">
           {pending ? "Bezig…" : "SEO-check"}
         </Button>
       </form>
