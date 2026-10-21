@@ -5,7 +5,21 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole, requireUser, signIn, signOut } from "@/lib/auth";
-import { addExistingBlock, addFaqBlock, addMessage, catalogFor, messagesFor, runPlan } from "@/lib/content";
+import {
+  addExistingBlock,
+  addFaqBlock,
+  addMessage,
+  addSharedBlock,
+  addSharedFaq,
+  catalogFor,
+  demoOutline,
+  matchUrls,
+  messagesFor,
+  outlineFrom,
+  replacePageImage,
+  replacePageText,
+  runPlan,
+} from "@/lib/content";
 import { canAccess, clientById, db, userById } from "@/lib/db";
 import { durableDatabase } from "@/lib/sql";
 import { encrypt } from "@/lib/crypto";
@@ -13,13 +27,14 @@ import { guardPrompt } from "@/lib/guard";
 import { demoPageTitle, demoReply, isDemo, isFaqLayout } from "@/lib/demo";
 import { parseFaqs } from "@/lib/faq";
 import { locateOnSite, pageKey, samePage } from "@/lib/locate";
+import { parsePlace, snippetBlockReason, snippetHint } from "@/lib/place";
 import { planPrompt, type Task } from "@/lib/planner";
 import type { PostKind } from "@/lib/types";
 import { applyBulk, planBulk } from "@/lib/bulk";
 import { demoSeoAudit, loadLivePages, runSeoAudit, type SeoAudit } from "@/lib/seo-audit";
 import { allowWords, dutchSpell } from "@/lib/spell";
 import { auditAddress, auditSpelling, demoAddressAudit, demoSpellAudit, type AddressAudit, type SpellAudit } from "@/lib/text-audit";
-import { listContent, testConnection, WpError } from "@/lib/wp";
+import { getContent, listContent, testConnection, WpError } from "@/lib/wp";
 
 export async function loginAction(_state: { error: string } | null, formData: FormData) {
   const email = String(formData.get("email") || "");
@@ -325,6 +340,7 @@ export async function addBlockAction(_state: { error: string } | null, formData:
       heading,
       text,
       file: file instanceof File ? file : null,
+      place: parsePlace(String(formData.get("place") || "")),
     });
   } catch (error) {
     reply = error instanceof WpError ? error.message : "Het blok is niet toegevoegd.";
@@ -417,4 +433,295 @@ export async function bulkAction(_state: { error: string; notice: string } | nul
   } catch (error) {
     return { error: error instanceof WpError ? error.message : "De bulk-wijziging is niet gelukt.", notice: "" };
   }
+}
+
+async function openClient(formData: FormData) {
+  const user = await requireUser();
+  const clientId = String(formData.get("clientId") || "");
+  if (!(await canAccess(user, clientId))) return { error: "Geen toegang tot deze klant." };
+  const client = await clientById(clientId);
+  if (!client) return { error: "Klant niet gevonden." };
+  return { error: "", user, clientId, client };
+}
+
+function faqItems(formData: FormData) {
+  const questions = formData.getAll("question").map((item) => String(item).trim());
+  const answers = formData.getAll("answer").map((item) => String(item).trim());
+  return questions
+    .map((question, index) => ({ question, answer: answers[index] || "" }))
+    .filter((item) => item.question && item.answer);
+}
+
+function fileOf(formData: FormData) {
+  const file = formData.get("image");
+  return file instanceof File && file.size > 0 ? file : null;
+}
+
+export async function createDraftAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  const task = formData.get("task") === "case" ? "case" : "blog";
+  const title = String(formData.get("title") || "").trim();
+  const text = String(formData.get("text") || "").trim();
+  const stats = String(formData.get("stats") || "").trim();
+  if (!title) return { error: "Vul een titel in.", notice: "" };
+  const guarded = guardPrompt(`${title}\n${text}\n${stats}`);
+  if (!guarded.allowed) return { error: guarded.message, notice: "" };
+  const prompt = [`Titel: ${title}`, text ? `Tekst: ${text}` : "", stats ? `Cijfers: ${stats}` : ""].filter(Boolean).join("\n");
+  if (isDemo(opened.client.id)) {
+    return { error: "", notice: demoReply(task === "case" ? "Case toevoegen" : "Blog toevoegen", prompt) };
+  }
+  await addMessage(opened.clientId, opened.user.id, "user", prompt);
+  let reply = "";
+  try {
+    const catalog = await catalogFor(opened.client);
+    const plan = planPrompt(prompt, catalog, false, task);
+    reply = await runPlan({ client: opened.client, plan, kind: null, postId: null, file: fileOf(formData) });
+  } catch (error) {
+    reply = error instanceof WpError ? error.message : "Het concept is niet aangemaakt.";
+  }
+  await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+  revalidatePath(`/klanten/${opened.clientId}`);
+  return { error: "", notice: reply };
+}
+
+export async function inspectPageAction(
+  _state: {
+    error: string;
+    title: string;
+    link: string;
+    kind: PostKind | null;
+    postId: number | null;
+    blocks: { index: number; layout: string; label: string; preview: string; hasImage: boolean; hasText: boolean; shared: boolean }[];
+  } | null,
+  formData: FormData,
+) {
+  const empty = { error: "", title: "", link: "", kind: null, postId: null, blocks: [] };
+  const opened = await openClient(formData);
+  if (!opened.client) return { ...empty, error: opened.error };
+  const located = locateOnSite(opened.client.site_url, String(formData.get("url") || ""));
+  if ("error" in located) return { ...empty, error: located.error };
+  if (isDemo(opened.client.id)) {
+    const link = String(formData.get("url") || "").trim();
+    return {
+      error: "",
+      title: demoPageTitle(located.key.path),
+      link,
+      kind: "pages" as const,
+      postId: 1,
+      blocks: demoOutline().map(({ index, layout, label, preview, hasImage, hasText, shared }) => ({
+        index,
+        layout,
+        label,
+        preview,
+        hasImage,
+        hasText,
+        shared,
+      })),
+    };
+  }
+  const kinds: PostKind[] = ["pages", "cases", "posts"];
+  try {
+    for (const kind of kinds) {
+      const items = await listContent(opened.client, kind);
+      const hit = items.find((item) => {
+        const key = pageKey(item.link);
+        return key ? samePage(key, located.key) : false;
+      });
+      if (!hit) continue;
+      const post = await getContent(opened.client, kind, hit.id);
+      const catalog = await catalogFor(opened.client);
+      return {
+        error: "",
+        title: hit.title,
+        link: hit.link,
+        kind,
+        postId: hit.id,
+        blocks: outlineFrom(post.acf?.content, catalog).map(({ index, layout, label, preview, hasImage, hasText, shared }) => ({
+          index,
+          layout,
+          label,
+          preview,
+          hasImage,
+          hasText,
+          shared,
+        })),
+      };
+    }
+  } catch (error) {
+    return { ...empty, error: error instanceof WpError ? error.message : "De pagina is niet opgehaald." };
+  }
+  return { ...empty, error: "Deze URL is geen pagina, blog of case op deze site." };
+}
+
+export async function faqAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  const items = faqItems(formData);
+  if (!items.length) return { error: "Vul minstens één vraag en antwoord in.", notice: "" };
+  const many = String(formData.get("many") || "") === "yes";
+  const layout = isFaqLayout(String(formData.get("faqLayout") || "")) ? String(formData.get("faqLayout") || "") : "faqsimple";
+  const heading = String(formData.get("heading") || "").trim();
+  const guarded = guardPrompt(items.map((item) => `${item.question} ${item.answer}`).join("\n") + heading);
+  if (!guarded.allowed) return { error: guarded.message, notice: "" };
+  if (many) {
+    const matched = await matchUrls(opened.client, String(formData.get("urls") || ""));
+    if (!matched.hits.length) return { error: matched.bad[0] || "Plak de URL's van de pagina's.", notice: "" };
+    if (isDemo(opened.client.id)) {
+      return {
+        error: "",
+        notice: `${demoReply("FAQ toevoegen", items.map((item) => item.question).join(", "))}\nEr zou één snippet komen op ${matched.hits.length} pagina's, boven de footer.${matched.bad.length ? ` Overgeslagen: ${matched.bad.join(" ")}` : ""}`,
+      };
+    }
+    let reply = "";
+    try {
+      const catalog = await catalogFor(opened.client);
+      reply = await addSharedFaq(opened.client, catalog, matched.hits, layout, items, heading);
+      if (matched.bad.length) reply += ` Overgeslagen: ${matched.bad.join(" ")}`;
+    } catch (error) {
+      reply = error instanceof WpError ? error.message : "De FAQ-snippet is niet gezet.";
+    }
+    await addMessage(opened.clientId, opened.user.id, "user", `FAQ op ${matched.hits.length} pagina's`);
+    await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+    revalidatePath(`/klanten/${opened.clientId}`);
+    return { error: "", notice: reply };
+  }
+  const kindValue = String(formData.get("kind") || "");
+  const kind = kindValue === "pages" || kindValue === "cases" || kindValue === "posts" ? kindValue : null;
+  const postId = Number(formData.get("postId") || 0) || null;
+  if (!kind || !postId) return { error: "Plak eerst de URL van die ene pagina.", notice: "" };
+  if (isDemo(opened.client.id)) {
+    return { error: "", notice: `${demoReply("FAQ toevoegen", items[0].question)}\n${items.length} vragen zouden direct op de pagina komen, zonder snippet.` };
+  }
+  let reply = "";
+  try {
+    const catalog = await catalogFor(opened.client);
+    reply = await addFaqBlock(opened.client, catalog, kind, postId, layout, items, heading);
+  } catch (error) {
+    reply = error instanceof WpError ? error.message : "De FAQ is niet toegevoegd.";
+  }
+  await addMessage(opened.clientId, opened.user.id, "user", `FAQ op één pagina`);
+  await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+  revalidatePath(`/klanten/${opened.clientId}`);
+  return { error: "", notice: reply };
+}
+
+export async function seoFieldsAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  const seoTitle = String(formData.get("seoTitle") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const keyword = String(formData.get("keyword") || "").trim();
+  if (!seoTitle && !description && !keyword) return { error: "Vul een SEO-titel, meta-omschrijving of focuswoord in.", notice: "" };
+  const kindValue = String(formData.get("kind") || "");
+  const kind = kindValue === "pages" || kindValue === "cases" || kindValue === "posts" ? kindValue : null;
+  const postId = Number(formData.get("postId") || 0) || null;
+  if (!kind || !postId) return { error: "Plak eerst de URL van de pagina.", notice: "" };
+  const prompt = `SEO-titel: ${seoTitle}. Meta-omschrijving: ${description}. Focuswoord: ${keyword}`;
+  const guarded = guardPrompt(prompt);
+  if (!guarded.allowed) return { error: guarded.message, notice: "" };
+  if (isDemo(opened.client.id)) return { error: "", notice: demoReply("SEO aanpassen", prompt) };
+  let reply = "";
+  try {
+    reply = await runPlan({
+      client: opened.client,
+      plan: { kind: "seo-meta", seoTitle, description, keyword },
+      kind,
+      postId,
+      file: null,
+    });
+  } catch (error) {
+    reply = error instanceof WpError ? error.message : "De SEO is niet opgeslagen.";
+  }
+  await addMessage(opened.clientId, opened.user.id, "user", prompt);
+  await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+  revalidatePath(`/klanten/${opened.clientId}`);
+  return { error: "", notice: reply };
+}
+
+export async function replaceTextAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  const from = String(formData.get("from") || "").trim();
+  const to = String(formData.get("to") || "").trim();
+  const index = Number(formData.get("index"));
+  if (!from || !to) return { error: "Plak de oude zin en schrijf de nieuwe zin.", notice: "" };
+  if (!Number.isInteger(index) || index < 0) return { error: "Kies eerst het blok op de pagina.", notice: "" };
+  const kindValue = String(formData.get("kind") || "");
+  const kind = kindValue === "pages" || kindValue === "cases" || kindValue === "posts" ? kindValue : null;
+  const postId = Number(formData.get("postId") || 0) || null;
+  if (!kind || !postId) return { error: "Plak eerst de URL.", notice: "" };
+  const guarded = guardPrompt(`${from}\n${to}`);
+  if (!guarded.allowed) return { error: guarded.message, notice: "" };
+  if (isDemo(opened.client.id)) return { error: "", notice: demoReply("Tekst wijzigen", `${from} → ${to}`) };
+  let reply = "";
+  try {
+    const catalog = await catalogFor(opened.client);
+    reply = await replacePageText(opened.client, catalog, kind, postId, index, from, to);
+  } catch (error) {
+    reply = error instanceof WpError ? error.message : "De tekst is niet gewijzigd.";
+  }
+  await addMessage(opened.clientId, opened.user.id, "user", `Vervang “${from}” door “${to}”`);
+  await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+  revalidatePath(`/klanten/${opened.clientId}`);
+  return { error: "", notice: reply };
+}
+
+export async function replaceImageAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  const file = fileOf(formData);
+  const index = Number(formData.get("index"));
+  if (!file) return { error: "Kies de nieuwe afbeelding.", notice: "" };
+  if (!Number.isInteger(index) || index < 0) return { error: "Kies eerst het blok op de pagina.", notice: "" };
+  const kindValue = String(formData.get("kind") || "");
+  const kind = kindValue === "pages" || kindValue === "cases" || kindValue === "posts" ? kindValue : null;
+  const postId = Number(formData.get("postId") || 0) || null;
+  if (!kind || !postId) return { error: "Plak eerst de URL.", notice: "" };
+  if (isDemo(opened.client.id)) return { error: "", notice: demoReply("Afbeelding wijzigen", `blok ${index + 1}`) };
+  let reply = "";
+  try {
+    const catalog = await catalogFor(opened.client);
+    reply = await replacePageImage(opened.client, catalog, kind, postId, index, file);
+  } catch (error) {
+    reply = error instanceof WpError ? error.message : "De afbeelding is niet gewijzigd.";
+  }
+  await addMessage(opened.clientId, opened.user.id, "user", `Nieuwe afbeelding in blok ${index + 1}`);
+  await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+  revalidatePath(`/klanten/${opened.clientId}`);
+  return { error: "", notice: reply };
+}
+
+export async function addSharedBlockAction(_state: { error: string; notice?: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  const layout = String(formData.get("layout") || "");
+  const reason = snippetBlockReason(layout);
+  if (reason) return { error: reason, notice: "" };
+  const heading = String(formData.get("heading") || "").trim();
+  const text = String(formData.get("text") || "").trim();
+  const guarded = guardPrompt(`${heading}\n${text}`);
+  if (!guarded.allowed) return { error: guarded.message, notice: "" };
+  const place = parsePlace(String(formData.get("place") || ""));
+  if (place.startsWith("after:")) return { error: "In bulk kan de plek alleen onder de hero of boven de footer.", notice: "" };
+  if (isDemo(opened.client.id)) {
+    const hint = snippetHint(layout);
+    return {
+      error: "",
+      notice: `${demoReply("Nieuw blok toevoegen", layout)}\nEr zou één snippet komen, ${place === "under-hero" ? "onder de hero" : "boven de footer"}, op elke gepubliceerde pagina.${hint ? ` ${hint}` : ""}`,
+    };
+  }
+  let reply = "";
+  try {
+    const catalog = await catalogFor(opened.client);
+    reply = await addSharedBlock(opened.client, catalog, layout, { heading, text, file: fileOf(formData), place });
+    const hint = snippetHint(layout);
+    if (hint) reply += ` ${hint}`;
+  } catch (error) {
+    reply = error instanceof WpError ? error.message : "Het blok is niet op de pagina's gezet.";
+  }
+  await addMessage(opened.clientId, opened.user.id, "user", `Snippet ${layout} ${place}`);
+  await addMessage(opened.clientId, opened.user.id, "assistant", reply);
+  revalidatePath(`/klanten/${opened.clientId}`);
+  return { error: "", notice: reply };
 }

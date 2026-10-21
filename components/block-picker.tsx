@@ -7,6 +7,7 @@ import { BlockPreview } from "@/components/block-preview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { snippetHint } from "@/lib/place";
 import type { BlockDef, PostKind } from "@/lib/types";
 
 export function BlockPicker({
@@ -14,15 +15,28 @@ export function BlockPicker({
   clientId,
   kind,
   postId,
+  title = "Kies het blok",
+  intro,
+  placeOptions = [],
+  submitAction = addBlockAction,
+  requirePage = true,
 }: {
   blocks: BlockDef[];
   clientId: string;
   kind: PostKind | null;
   postId: number | null;
+  title?: string;
+  intro?: string;
+  placeOptions?: { value: string; label: string }[];
+  submitAction?: (
+    state: { error: string; notice?: string } | null,
+    formData: FormData,
+  ) => Promise<{ error: string; notice?: string }>;
+  requirePage?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [layout, setLayout] = useState<string | null>(null);
-  const [state, action, pending] = useActionState(addBlockAction, null);
+  const [state, action, pending] = useActionState(submitAction, null);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return blocks;
@@ -34,9 +48,11 @@ export function BlockPicker({
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="font-heading text-2xl text-[#061122]">3. Kies het blok</h2>
+          <h2 className="text-xl text-[#061122]" style={{ fontFamily: "Pliant, Manrope, sans-serif" }}>
+            {title}
+          </h2>
           <p className="mt-1 max-w-xl text-sm text-[#585858]">
-            {blocks.length} blokken uit het thema. De oranje naam is de themanaam, zoals hero of image_text.
+            {intro || `${blocks.length} blokken uit het thema. De oranje naam is de themanaam, zoals hero of image_text.`}
           </p>
         </div>
         <Input
@@ -84,12 +100,26 @@ export function BlockPicker({
           {selected.slots.image ? (
             <Input name="image" type="file" accept="image/*" className="h-10" />
           ) : null}
+          {snippetHint(selected.layout) ? <p className="text-sm text-[#585858]">{snippetHint(selected.layout)}</p> : null}
+          {placeOptions.length > 0 ? (
+            <fieldset className="space-y-2">
+              <legend className="text-sm text-[#585858]">Waar moet het blok staan?</legend>
+              {placeOptions.map((option, index) => (
+                <label key={option.value} className="flex items-center gap-2 text-sm text-[#061122]">
+                  <input type="radio" name="place" value={option.value} defaultChecked={index === 0} />
+                  {option.label}
+                </label>
+              ))}
+            </fieldset>
+          ) : (
+            <input type="hidden" name="place" value="above-footer" />
+          )}
           {state?.error ? <p className="text-sm text-[#d91515]">{state.error}</p> : null}
           {state && "notice" in state && state.notice ? (
             <p className="whitespace-pre-wrap text-sm text-[#061122]">{state.notice}</p>
           ) : null}
-          <Button type="submit" disabled={pending || !kind || !postId} className="h-10 px-4">
-            {pending ? "Bezig…" : kind && postId ? `${selected.label} toevoegen` : "Kies eerst een pagina"}
+          <Button type="submit" disabled={pending || (requirePage && (!kind || !postId))} className="h-10 px-4">
+            {pending ? "Bezig…" : !requirePage || (kind && postId) ? `${selected.label} toevoegen` : "Kies eerst een pagina"}
           </Button>
         </form>
       ) : null}
