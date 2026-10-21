@@ -446,11 +446,7 @@ async function openClient(formData: FormData) {
 }
 
 function faqItems(formData: FormData) {
-  const questions = formData.getAll("question").map((item) => String(item).trim());
-  const answers = formData.getAll("answer").map((item) => String(item).trim());
-  return questions
-    .map((question, index) => ({ question, answer: answers[index] || "" }))
-    .filter((item) => item.question && item.answer);
+  return parseFaqs(String(formData.get("faqs") || ""));
 }
 
 function fileOf(formData: FormData) {
@@ -559,7 +555,12 @@ export async function faqAction(_state: { error: string; notice: string } | null
   const opened = await openClient(formData);
   if (!opened.client) return { error: opened.error, notice: "" };
   const items = faqItems(formData);
-  if (!items.length) return { error: "Vul minstens één vraag en antwoord in.", notice: "" };
+  if (!items.length) {
+    return {
+      error: "Plak de vragen in één keer. Bijvoorbeeld:\n\nVraag: Wat kost het?\nAntwoord: Vanaf 6.900 euro.",
+      notice: "",
+    };
+  }
   const many = String(formData.get("many") || "") === "yes";
   const layout = isFaqLayout(String(formData.get("faqLayout") || "")) ? String(formData.get("faqLayout") || "") : "faqsimple";
   const heading = String(formData.get("heading") || "").trim();

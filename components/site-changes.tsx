@@ -139,7 +139,6 @@ function DraftForm({ clientId, task }: { clientId: string; task: "blog" | "case"
 }
 
 function FaqFields({ layouts }: { layouts: BlockDef[] }) {
-  const [rows, setRows] = useState([{ question: "", answer: "" }]);
   const choices = layouts.filter((block) => isFaqLayout(block.layout));
   return (
     <div className="space-y-3">
@@ -158,33 +157,13 @@ function FaqFields({ layouts }: { layouts: BlockDef[] }) {
       ) : (
         <input type="hidden" name="faqLayout" value="faqsimple" />
       )}
-      <div className="space-y-3">
-        {rows.map((row, index) => (
-          <div key={index} className="grid gap-2 sm:grid-cols-2">
-            <Input
-              name="question"
-              value={row.question}
-              placeholder="Vraag"
-              className="h-10"
-              onChange={(event) =>
-                setRows((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, question: event.target.value } : item)))
-              }
-            />
-            <Textarea
-              name="answer"
-              value={row.answer}
-              placeholder="Antwoord"
-              className="min-h-20"
-              onChange={(event) =>
-                setRows((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, answer: event.target.value } : item)))
-              }
-            />
-          </div>
-        ))}
-      </div>
-      <Button type="button" variant="outline" className="h-9" onClick={() => setRows((current) => [...current, { question: "", answer: "" }])}>
-        Nog een vraag
-      </Button>
+      <p className="text-sm text-[#585858]">Plak alle vragen onder elkaar.</p>
+      <Textarea
+        name="faqs"
+        required
+        placeholder={"Vraag: Wat kost het?\nAntwoord: Vanaf 6.900 euro.\n\nVraag: Hoe lang duurt het?\nAntwoord: Ongeveer zes weken."}
+        className="min-h-48"
+      />
     </div>
   );
 }
