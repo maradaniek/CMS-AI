@@ -64,6 +64,7 @@ function titles() {
   return report.groups.map((group) => group.title);
 }
 
+assert.deepEqual(parsed.h3, []);
 assert.ok(titles().includes("Geen H1"));
 assert.ok(titles().includes("Geen titel-tag"));
 assert.ok(titles().some((title) => title.startsWith("Titel-tag te kort")));
@@ -76,5 +77,15 @@ assert.equal(report.keywords.find((row) => row.name === "Woord")?.inH1, true);
 assert.equal(report.keywords.find((row) => row.name === "Leeg")?.count, 0);
 assert.ok(titles().includes("Focuswoord ontbreekt in de titel-tag"));
 assert.equal(report.checked, 7);
+
+const headings = auditPages(
+  [
+    page({ name: "Sprong", link: "https://demo.woeler.nl/sprong", h1: ["Kop"], h2: [], h3: ["Stap een", "Stap twee"] }),
+    page({ name: "Netjes", link: "https://demo.woeler.nl/netjes", h1: ["Kop"], h2: ["Tussen"], h3: ["Dieper"] }),
+  ],
+  "",
+);
+const jump = headings.groups.find((group) => group.title === "H1 en H3, geen H2");
+assert.deepEqual(jump?.hits.map((hit) => hit.name), ["Sprong"]);
 
 console.log("seo-audit ok");

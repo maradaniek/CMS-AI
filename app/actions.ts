@@ -31,6 +31,7 @@ import { parsePlace, snippetBlockReason, snippetHint } from "@/lib/place";
 import { planPrompt, type Task } from "@/lib/planner";
 import type { PostKind } from "@/lib/types";
 import { applyBulk, planBulk } from "@/lib/bulk";
+import { applyLiveSpelling, promoteLiveHeadings } from "@/lib/check-fixes";
 import { demoSeoAudit, loadLivePages, runSeoAudit, type SeoAudit } from "@/lib/seo-audit";
 import { allowWords, dutchSpell } from "@/lib/spell";
 import { auditAddress, auditSpelling, demoAddressAudit, demoSpellAudit, type AddressAudit, type SpellAudit } from "@/lib/text-audit";
@@ -724,4 +725,38 @@ export async function addSharedBlockAction(_state: { error: string; notice?: str
   await addMessage(opened.clientId, opened.user.id, "assistant", reply);
   revalidatePath(`/klanten/${opened.clientId}`);
   return { error: "", notice: reply };
+}
+
+export async function promoteHeadingsAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  let notice = "";
+  try {
+    notice = await promoteLiveHeadings(opened.client);
+  } catch (error) {
+    return { error: error instanceof WpError ? error.message : "De koppen zijn niet aangepast.", notice: "" };
+  }
+  if (!isDemo(opened.client.id)) {
+    await addMessage(opened.clientId, opened.user.id, "user", "H3's vervangen door H2's");
+    await addMessage(opened.clientId, opened.user.id, "assistant", notice);
+    revalidatePath(`/klanten/${opened.clientId}`);
+  }
+  return { error: "", notice };
+}
+
+export async function applySpellingAction(_state: { error: string; notice: string } | null, formData: FormData) {
+  const opened = await openClient(formData);
+  if (!opened.client) return { error: opened.error, notice: "" };
+  let notice = "";
+  try {
+    notice = await applyLiveSpelling(opened.client);
+  } catch (error) {
+    return { error: error instanceof WpError ? error.message : "De spelling is niet doorgevoerd.", notice: "" };
+  }
+  if (!isDemo(opened.client.id)) {
+    await addMessage(opened.clientId, opened.user.id, "user", "Spelling doorvoeren");
+    await addMessage(opened.clientId, opened.user.id, "assistant", notice);
+    revalidatePath(`/klanten/${opened.clientId}`);
+  }
+  return { error: "", notice };
 }

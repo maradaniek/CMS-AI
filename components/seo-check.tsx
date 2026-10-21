@@ -1,12 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import { seoAuditAction } from "@/app/actions";
+import { promoteHeadingsAction, seoAuditAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export function SeoCheck({ clientId }: { clientId: string }) {
   const [state, action, pending] = useActionState(seoAuditAction, null);
+  const [fix, fixAction, fixing] = useActionState(promoteHeadingsAction, null);
   const report = state?.report;
 
   return (
@@ -69,6 +70,19 @@ export function SeoCheck({ clientId }: { clientId: string }) {
                   </li>
                 ))}
               </ul>
+              {group.title === "H1 en H3, geen H2" ? (
+                <form action={fixAction} className="mt-3 space-y-2">
+                  <input type="hidden" name="clientId" value={clientId} />
+                  <p className="text-sm text-[#585858]">
+                    Ik zet die H3's om naar H2's. Alleen op deze pagina's, en alleen in de kopvelden van het thema. Een H3 die het thema zelf zet, blijft staan.
+                  </p>
+                  <Button type="submit" disabled={fixing} className="h-10 px-4">
+                    {fixing ? "Bezig…" : "H3's vervangen door H2's"}
+                  </Button>
+                  {fix?.error ? <p className="text-sm text-[#d91515]">{fix.error}</p> : null}
+                  {fix?.notice ? <p className="whitespace-pre-wrap text-sm text-[#061122]">{fix.notice}</p> : null}
+                </form>
+              ) : null}
             </div>
           ))}
         </div>

@@ -17,6 +17,7 @@ export type SpellAudit = {
   checked: number;
   unread: number;
   hits: TextHit[];
+  fixable: number;
 };
 
 function tokens(text: string) {
@@ -118,29 +119,52 @@ export function misspellings(text: string, spell: Spellbook, allow: Set<string>)
       (parts.length > 1 && parts.every((part) => part.length < 3 || spell.correct(part) || spell.correct(part.toLowerCase())));
     if (known) continue;
     seen.add(key);
-    const suggestion = spell.suggest(key).find((item) => item.toLowerCase() !== key) ?? "";
-    found.push({ word, suggestion });
+    const raw = spell.suggest(key).find((item) => item.toLowerCase() !== key) ?? "";
+    found.push({ word, suggestion: safeSuggestion(word, raw) });
     if (found.length >= 8) break;
   }
   return found;
 }
 
+export function levenshtein(left: string, right: string) {
+  const rows = Array.from({ length: left.length + 1 }, (_, index) => [index]);
+  for (let column = 1; column <= right.length; column += 1) rows[0][column] = column;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      rows[i][j] = Math.min(rows[i - 1][j] + 1, rows[i][j - 1] + 1, rows[i - 1][j - 1] + cost);
+    }
+  }
+  return rows[left.length][right.length];
+}
+
+export function safeSuggestion(word: string, suggestion: string) {
+  const clean = suggestion.trim();
+  if (!/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ’'-]*$/.test(clean)) return "";
+  if (clean.toLowerCase() === word.toLowerCase()) return "";
+  if (levenshtein(word.toLowerCase(), clean.toLowerCase()) > 2) return "";
+  return clean;
+}
+
 export function auditSpelling(pages: ParsedPage[], spell: Spellbook, allow: Set<string>): SpellAudit {
   const hits: TextHit[] = [];
+  let fixable = 0;
   for (const page of pages) {
     if (page.error) continue;
     const mistakes = misspellings(`${page.h1.join(" ")} ${page.text}`, spell, allow);
     if (!mistakes.length) continue;
+    fixable += mistakes.filter((item) => item.suggestion).length;
     hits.push({
       name: page.name,
       link: page.link,
-      detail: mistakes.map((item) => (item.suggestion ? `${item.word} → ${item.suggestion}` : item.word)).join(" · "),
+      detail: mistakes.map((item) => (item.suggestion ? `${item.word} → ${item.suggestion}` : `${item.word} (geen veilig voorstel)`)).join(" · "),
     });
   }
   return {
     checked: pages.filter((page) => !page.error).length,
     unread: pages.filter((page) => page.error).length,
     hits,
+    fixable,
   };
 }
 
@@ -155,6 +179,7 @@ export function demoSpellAudit(): SpellAudit {
         detail: "warmptepomp → warmtepomp",
       },
     ],
+    fixable: 1,
   };
 }
 

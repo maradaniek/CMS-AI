@@ -10,6 +10,7 @@ export type ParsedPage = {
   description: string;
   h1: string[];
   h2: string[];
+  h3?: string[];
   text: string;
   missingAlt: number;
   noindex: boolean;
@@ -34,6 +35,8 @@ export type SeoAudit = {
   groups: SeoGroup[];
   keywords: KeywordRow[];
 };
+
+export const H3_WITHOUT_H2 = "H1 en H3, geen H2";
 
 const TITLE_SHORT = 30;
 const TITLE_LONG = 70;
@@ -100,6 +103,7 @@ export function parseHtml(html: string): Omit<ParsedPage, "name" | "link"> {
     description,
     h1: headings(body, 1),
     h2: headings(body, 2),
+    h3: headings(body, 3),
     text: plainText(decodeHtml(body)),
     missingAlt,
     noindex: robots.split(/[,\s]+/).includes("noindex"),
@@ -145,6 +149,7 @@ export function auditPages(pages: ParsedPage[], keyword: string): SeoAudit {
     { title: "Dezelfde titel-tag", hits: [] },
     { title: "Dezelfde H1", hits: [] },
     { title: "Geen H2", hits: [] },
+    { title: H3_WITHOUT_H2, hits: [] },
     { title: "Afbeeldingen zonder alt", hits: [] },
     { title: "Staat op noindex", hits: [] },
     { title: "Focuswoord ontbreekt in de titel-tag", hits: [] },
@@ -201,6 +206,9 @@ export function auditPages(pages: ParsedPage[], keyword: string): SeoAudit {
       });
     }
     if (page.h2.length === 0) bucket("Geen H2").hits.push({ name: page.name, link: page.link, detail: "Geen H2 in de pagina." });
+    if (page.h1.length > 0 && page.h2.length === 0 && (page.h3 ?? []).length > 0) {
+      bucket(H3_WITHOUT_H2).hits.push({ name: page.name, link: page.link, detail: (page.h3 ?? []).join(" · ") });
+    }
     if (page.missingAlt > 0) {
       bucket("Afbeeldingen zonder alt").hits.push({
         name: page.name,
@@ -298,6 +306,18 @@ export function demoSeoAudit(keyword: string): SeoAudit {
         h1: ["Contact opnemen met Demo klant vandaag"],
         h2: ["Adres"],
         text: `Bel of mail ons over ${keyword || "een nieuwe site"}.`,
+        missingAlt: 0,
+        noindex: false,
+      },
+      {
+        name: "Werkwijze",
+        link: "https://demo.woeler.nl/werkwijze",
+        title: "Zo werkt een project bij Demo klant vandaag",
+        description,
+        h1: ["Zo werkt een project bij Demo klant"],
+        h2: [],
+        h3: ["Eerste stap", "Tweede stap"],
+        text: "Eerst kennismaken, daarna ontwerpen.",
         missingAlt: 0,
         noindex: false,
       },

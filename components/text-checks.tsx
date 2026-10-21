@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, type ReactNode } from "react";
-import { spellingAuditAction, styleAuditAction } from "@/app/actions";
+import { applySpellingAction, spellingAuditAction, styleAuditAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import type { AddressAudit, SpellAudit, TextHit } from "@/lib/text-audit";
 
@@ -17,7 +17,7 @@ export function SpellingCheck({ clientId }: { clientId: string }) {
       label="Spellingcheck"
       error={state?.error}
     >
-      {state?.report ? <SpellResult report={state.report} /> : null}
+      {state?.report ? <SpellResult clientId={clientId} report={state.report} /> : null}
     </CheckCard>
   );
 }
@@ -78,13 +78,27 @@ function CheckCard({
   );
 }
 
-function SpellResult({ report }: { report: SpellAudit }) {
+function SpellResult({ clientId, report }: { clientId: string; report: SpellAudit }) {
+  const [fix, action, pending] = useActionState(applySpellingAction, null);
   return (
     <div className="mt-4 max-h-96 space-y-3 overflow-auto text-sm">
       <p>
         {report.checked} pagina’s gelezen. {report.hits.length === 0 ? "Geen spelfouten gevonden." : `${report.hits.length} pagina’s met een onbekend woord.`}
       </p>
       <HitList hits={report.hits} />
+      {report.fixable > 0 ? (
+        <form action={action} className="space-y-2">
+          <input type="hidden" name="clientId" value={clientId} />
+          <p className="text-[#585858]">
+            Ik voer alleen de voorstellen door die er één of twee letters naast zitten, tot 8 per pagina. Een naam zonder voorstel blijft staan.
+          </p>
+          <Button type="submit" disabled={pending} className="h-10 px-4">
+            {pending ? "Bezig…" : "Spelling doorvoeren"}
+          </Button>
+          {fix?.error ? <p className="text-[#d91515]">{fix.error}</p> : null}
+          {fix?.notice ? <p className="whitespace-pre-wrap text-[#061122]">{fix.notice}</p> : null}
+        </form>
+      ) : null}
     </div>
   );
 }
