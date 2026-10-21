@@ -120,8 +120,8 @@ function DraftForm({ clientId, task }: { clientId: string; task: "blog" | "case"
       <input type="hidden" name="task" value={task} />
       <p className="text-sm text-[#585858]">
         {blog
-          ? "Een blog is een nieuw bericht. Daar is geen pagina-URL voor nodig. Hij komt als concept klaar."
-          : "Een case is een nieuw bericht. Daar is geen pagina-URL voor nodig. Hij komt als concept klaar."}
+          ? "Deze nieuwe blog wordt als concept klaargezet in de back-end."
+          : "Deze nieuwe case wordt als concept klaargezet in de back-end."}
       </p>
       <Input name="title" required placeholder="Titel" className="h-10" />
       <Textarea name="text" placeholder="Tekst" className="min-h-28" />
